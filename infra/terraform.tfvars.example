@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in. Never commit terraform.tfvars (gitignored).
+project                  = "azureflow"
+environment              = "dev"
+location                 = "polandcentral"
+image                    = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+budget_alert_email       = ""
+owner                    = "maciej"
+# allowed_storage_ip_ranges = ["203.0.113.10/32"]

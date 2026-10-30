@@ -1,0 +1,73 @@
+name: CD (deploy)
+
+on:
+  workflow_run:
+    workflows: ["CI (main)"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (commit SHA) to deploy"
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy to Azure Container Apps
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image reference
+        id: image
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            TAG="${{ github.event.workflow_run.head_sha || github.sha }}"
+          fi
+          echo "image=ghcr.io/${REPO_LOWER}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: false
+
+      - name: Deploy image revision
+        run: |
+          set -euo pipefail
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ steps.image.outputs.image }}"
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          URL="https://${{ vars.AZURE_CONTAINER_APP_FQDN }}"
+          for i in $(seq 1 30); do
+            if curl -fsS "$URL/health" >/tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "smoke test failed"; exit 1
+
+      - name: Print previous revisions
+        if: always()
+        run: |
+          az containerapp revision list \
+            --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query "[].{name:name,active:properties.active,created:properties.createdTime}" -o table || true

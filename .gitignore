@@ -1,0 +1,22 @@
+# Dependencies and build
+app/node_modules/
+app/.npm/
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/*.tfvars
+!infra/terraform.tfvars.example
+
+# Secrets
+.env
+*.pem
+*.key
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
