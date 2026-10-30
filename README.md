@@ -11,13 +11,14 @@ documented rollback.
 
 ## Architecture
 
-- **App** (`app/`): Node.js 22 + Express. Endpoints: `/health`, `/api/message`
-  (reads a secret from Key Vault via managed identity), `/api/blobs`
-  (list/upload text blobs in a private container).
+- **App** (`app/`): Node.js 22 + Express, v0.2.  Endpoints: `/health`,
+  `/ready`, `/api/message` (reads a secret from Key Vault via managed identity),
+  `/api/blobs` (list/upload/download/delete text blobs in a private container),
+  `/metrics`. Structured JSON logs, correlation id, graceful shutdown (SIGTERM).
 - **Infra** (`infra/`): Terraform (azurerm ~4.0). Resource group, Container Apps
-  environment, Container App (scale-to-zero), Key Vault (RBAC mode), Storage account
-  + private container, user-assigned managed identity, Log Analytics + Application
-  Insights, RBAC assignments, optional budget alert.
+  environment, Container App (scale-to-zero, liveness + readiness probes), Key Vault
+  (RBAC mode), Storage account + private container, user-assigned managed identity,
+  Log Analytics + Application Insights, RBAC assignments, optional budget alert.
 - **CI/CD** (`.github/workflows/`):
   - `pr.yml` — PR pipeline: lint, unit tests, docker build, terraform fmt/validate.
   - `ci.yml` — CI pipeline on merge to `main`: tests + build/push immutable image to GHCR.

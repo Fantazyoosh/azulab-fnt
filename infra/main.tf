@@ -165,6 +165,18 @@ resource "azurerm_container_app" "app" {
         name  = "CONTAINER_NAME"
         value = "demo"
       }
+
+      liveness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/health"
+      }
+
+      readiness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/ready"
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "azureflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Small portfolio service deployed to Azure Container Apps via Terraform and GitHub Actions CI/CD.",
   "main": "src/server.js",
   "scripts": {
@@ -15,6 +15,7 @@
     "@azure/identity": "^4.5.0",
     "@azure/keyvault-secrets": "^4.8.0",
     "@azure/storage-blob": "^12.25.0",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "pino": "^10.4.0"
   }
 }
