@@ -43,7 +43,7 @@ jobs:
         with:
           context: ./app
           push: false
-          tags: azureflow:pr-${{ github.event.pull_request.number }}
+          tags: azulab:pr-${{ github.event.pull_request.number }}
 
   terraform:
     name: Terraform validate

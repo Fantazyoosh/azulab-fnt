@@ -5,7 +5,7 @@
 set -euo pipefail
 
 : "${REPO:?set REPO=owner/repo}"
-APP_NAME="${APP_NAME:-azureflow-github-oidc}"
+APP_NAME="${APP_NAME:-azulab-github-oidc}"
 ENV_NAME="${ENV_NAME:-production}"
 
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
@@ -39,6 +39,6 @@ echo "Add these as GitHub repository VARIABLES:"
 echo "  AZURE_CLIENT_ID=$APP_ID"
 echo "  AZURE_TENANT_ID=$TENANT_ID"
 echo "  AZURE_SUBSCRIPTION_ID=$SUBSCRIPTION_ID"
-echo "  AZURE_RESOURCE_GROUP=rg-azureflow-dev-polandcentral   # adjust if you changed names"
-echo "  AZURE_CONTAINER_APP=ca-azureflow-dev"
+echo "  AZURE_RESOURCE_GROUP=rg-azulab-dev-polandcentral   # adjust if you changed names"
+echo "  AZURE_CONTAINER_APP=ca-azulab-dev"
 echo "  AZURE_CONTAINER_APP_FQDN=<from terraform output container_app_url, host only>"

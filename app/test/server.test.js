@@ -39,7 +39,7 @@ test("health returns ok", async () => {
   const r = await request(app, "GET", "/health");
   assert.equal(r.status, 200);
   assert.equal(r.body.status, "ok");
-  assert.equal(r.body.service, "azureflow");
+  assert.equal(r.body.service, "azulab");
   assert.ok(r.headers["x-request-id"], "correlation id is set");
 });
 

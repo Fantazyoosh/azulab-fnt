@@ -1,5 +1,5 @@
 {
-  "name": "azureflow",
+  "name": "azulab",
   "version": "0.2.0",
   "description": "Small portfolio service deployed to Azure Container Apps via Terraform and GitHub Actions CI/CD.",
   "main": "src/server.js",

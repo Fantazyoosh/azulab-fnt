@@ -1,4 +1,4 @@
-// azureflow application entry point.
+// azulab application entry point.
 //
 // Design notes (12factor-flavoured):
 //  * config in env (config.js)
@@ -23,7 +23,7 @@ const credential = new DefaultAzureCredential();
 function createState(cfg) {
   return {
     cfg,
-    secretCache: process.env.APP_MESSAGE || "hello from azureflow (no Key Vault configured)",
+    secretCache: process.env.APP_MESSAGE || "hello from azulab (no Key Vault configured)",
     secretLoaded: false,
     secretError: null,
     ready: false,
@@ -99,7 +99,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
   });
 
   app.get("/health", (_req, res) => {
-    res.status(200).json({ status: "ok", service: "azureflow", now: new Date().toISOString() });
+    res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
 
   app.get("/ready", async (_req, res) => {
@@ -208,7 +208,7 @@ function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   const app = buildApp(cfg, logger, state);
 
   const server = app.listen(cfg.port, () => {
-    logger.info({ port: cfg.port }, "azureflow listening");
+    logger.info({ port: cfg.port }, "azulab listening");
   });
 
   let shuttingDown = false;

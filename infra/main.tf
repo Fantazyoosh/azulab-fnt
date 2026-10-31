@@ -72,7 +72,7 @@ resource "azurerm_key_vault" "main" {
 
 resource "azurerm_key_vault_secret" "app_message" {
   name         = "app-message"
-  value        = "hello from azureflow key vault"
+  value        = "hello from azulab key vault"
   key_vault_id = azurerm_key_vault.main.id
   depends_on   = [azurerm_role_assignment.kv_admin]
 }

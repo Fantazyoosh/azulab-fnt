@@ -1,6 +1,6 @@
 variable "project" {
   type        = string
-  default     = "azureflow"
+  default     = "azulab"
   description = "Project short name used in resource names."
 }
 

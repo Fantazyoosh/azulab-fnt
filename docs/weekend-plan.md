@@ -1,4 +1,4 @@
-# Weekend plan — azureflow (ambitious track)
+# Weekend plan — azulab (ambitious track)
 
 Two days. Target: one reviewable portfolio artefact by Sunday evening, with the
 ability to explain every component without notes.

@@ -1,4 +1,4 @@
-# azureflow
+# azulab
 
 A small, intentionally simple HTTP service used as a portfolio piece for an Azure +
 CI/CD conversation. The point is not the app — it is the **end-to-end, defensible
@@ -40,8 +40,8 @@ npm start   # http://localhost:8080/health
 Docker:
 
 ```sh
-docker build -t azureflow:local app
-docker run --rm -p 8080:8080 azureflow:local
+docker build -t azulab:local app
+docker run --rm -p 8080:8080 azulab:local
 ```
 
 ## Provision infrastructure (once)

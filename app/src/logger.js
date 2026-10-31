@@ -4,7 +4,7 @@ const pkg = require("../package.json");
 function createLogger(level = "info") {
   return pino({
     level,
-    base: { service: "azureflow", version: pkg.version },
+    base: { service: "azulab", version: pkg.version },
     timestamp: pino.stdTimeFunctions.isoTime,
   });
 }
