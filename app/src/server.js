@@ -18,7 +18,11 @@ const { getConfig } = require("./config");
 const { createLogger } = require("./logger");
 const { metrics } = require("./metrics");
 
-const credential = new DefaultAzureCredential();
+function createCredential(cfg = {}) {
+  return cfg.azureClientId
+    ? new DefaultAzureCredential({ managedIdentityClientId: cfg.azureClientId })
+    : new DefaultAzureCredential();
+}
 
 function createState(cfg) {
   return {
@@ -38,6 +42,7 @@ async function loadSecret(cfg, logger, state) {
     return s.secretCache;
   }
   try {
+    const credential = createCredential(cfg);
     const client = new SecretClient(cfg.keyVaultUrl, credential);
     const sec = await client.getSecret(cfg.secretName);
     s.secretCache = sec.value || s.secretCache;
@@ -56,10 +61,10 @@ function blobNameValid(name) {
   return typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name);
 }
 
-function getBlobClient(cfg, name) {
-  const service = new BlobServiceClient(cfg.storageAccountUrl, credential);
+function getBlobClient(cfg) {
+  const service = new BlobServiceClient(cfg.storageAccountUrl, createCredential(cfg));
   const container = service.getContainerClient(cfg.containerName);
-  return { service, container, block: container.getBlockBlobClient(name) };
+  return { service, container };
 }
 
 function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state = null) {
@@ -127,7 +132,8 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
       for await (const b of container.listBlobsFlat()) items.push(b.name);
       res.json({ container: cfg.containerName, blobs: items });
     } catch (err) {
-      logger.error({ err: err.message }, "blob list failed");
+      logger.error({ err: err.message, stack: err.stack }, "blob list failed");
+
       res.status(500).json({ error: "blob_list_failed", message: err.message });
     }
   });
@@ -144,7 +150,8 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
 
     try {
-      const { container, block } = getBlobClient(cfg, name);
+      const { container } = getBlobClient(cfg);
+      const block = container.getBlockBlobClient(name);
       await container.createIfNotExists();
       await block.uploadData(Buffer.from(body, "utf8"), {
         blobHTTPHeaders: { blobContentType: "text/plain; charset=utf-8" },
@@ -162,7 +169,8 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
 
     try {
-      const { block } = getBlobClient(cfg, name);
+      const { container } = getBlobClient(cfg);
+      const block = container.getBlockBlobClient(name);
       const download = await block.download(0);
       res.type("text/plain; charset=utf-8");
       download.readableStreamBody.pipe(res);
@@ -178,7 +186,8 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
 
     try {
-      const { block } = getBlobClient(cfg, name);
+      const { container } = getBlobClient(cfg);
+      const block = container.getBlockBlobClient(name);
       await block.deleteIfExists();
       res.status(204).send();
     } catch (err) {

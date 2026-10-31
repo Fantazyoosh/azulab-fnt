@@ -22,6 +22,9 @@ function getConfig(env = process.env) {
     secretName: env.SECRET_NAME || "app-message",
     storageAccountUrl: env.STORAGE_ACCOUNT_URL || "",
     containerName: env.CONTAINER_NAME || "demo",
+    // Azure Container Apps with a user-assigned managed identity needs the
+    // client id to request tokens; DefaultAzureCredential does not guess it.
+    azureClientId: env.AZURE_CLIENT_ID || "",
     maxUploadBytes,
     shutdownTimeoutMs,
     logLevel: env.LOG_LEVEL || "info",

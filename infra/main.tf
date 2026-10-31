@@ -165,6 +165,10 @@ resource "azurerm_container_app" "app" {
         name  = "CONTAINER_NAME"
         value = "demo"
       }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.app.client_id
+      }
 
       liveness_probe {
         transport = "HTTP"
