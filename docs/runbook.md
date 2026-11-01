@@ -1,167 +1,71 @@
-# Runbook — co sprawdzam przy wdrożeniu (krok po kroku)
+# 📖 Operational Runbook: Azulab Deployment & Maintenance
 
-Ma być czytane **przed** merge, a potem **w trakcie** pipeline. Żadnych skrótów.
-
-Skróty: **IaC** = Infrastructure as Code (teraz: Terraform). **CI/CD** = automatyczne testy i wdrożenia. **SHA** = identyfikator commita. **Revision** = wersja wdrożenia w Container Apps. **Probe** = sonda zdrowia Container Apps.
+This runbook provides a standard operating procedure (SOP) for managing the Azulab ecosystem. It is designed to ensure that deployments are predictable and that failures are recoverable.
 
 ---
 
-## Faza 0 — Przed pushem
+## 🛠️ 1. The Deployment Lifecycle
 
-- [ ] Zmiana ma sens i wiadomo, dlaczego ją robisz.
-- [ ] Commit message mówi co i dlaczego.
-- [ ] `npm test` przechodzi lokalnie (6/6).
-- [ ] `docker build` przechodzi lokalnie (`azulab:local`).
-- [ ] `terraform fmt` nie zgłasza błędów.
-- [ ] `terraform validate` OK.
-- [ ] Brak sekretów w plikach (np. `AZURE_CLIENT_SECRET`, tokeny, hasła).
+### Phase A: Pre-Push (Local Validation)
+Before pushing code, every change must be validated locally:
+- [ ] **Linting**: Ensure no syntax errors in `server.js`.
+- [ ] **Terraform Plan**: Run `terraform plan` to ensure infrastructure changes are expected.
+- [ ] **Docker Context**: Verify that all necessary folders (e.g., `/public`) are included in the `Dockerfile` and not ignored by `.dockerignore`.
 
-Jeśli któryś punkt nie przechodzi — nie pushuj, bo pipeline i tak padnie.
+### Phase B: Pull Request (The Gatekeeper)
+Once a PR is opened, the following automated checks must pass:
+- **Unit Tests**: Validation of core logic.
+- **Build Check**: A trial Docker build to ensure the image is valid.
+- **TFLint**: Validation of Terraform syntax.
 
----
-
-## Faza 1 — Pull Request (pipeline PR)
-
-1. `pr.yml` uruchamia się po otwarciu PR.
-2. Sprawdza:
-   - **Lint** — czy kod się parse-uje i syntax jest OK.
-   - **Testy** (unit tests).
-   - **Docker build** (obraz się buduje).
-   - **Terraform** (`fmt` + `validate`).
-3. Jeśli wszystko zielone — merge.
-
-Czego sprawdzam:
-- Brak błędów lint/test.
-- Obraz zbudowany (bez pushu).
-- Terraform bez błędów formatowania.
-- Pipeline trwa < 5 min.
-
-Jeśli utnie się:
-- Lint fail → popraw syntax, commit, push.
-- Test fail → powtórz lokalnie, napraw, push.
-- Docker fail → sprawdź Dockerfile.
-- Terraform fail → sprawdź `fmt` lub `validate`.
+### Phase C: Continuous Deployment (The Rollout)
+Upon merge to `main`, the CD pipeline triggers:
+1. **OIDC Auth**: Securely connects GitHub to Azure.
+2. **Image Push**: Pushes an immutable image (tagged with Git SHA) to GHCR.
+3. **Revision Update**: Azure Container Apps creates a new revision.
+4. **Smoke Tests**: The pipeline pings `/health`, `/ready`, and `/api/message`. If any fail, the deployment is marked as failed.
 
 ---
 
-## Faza 2 — CI (na main)
+## 🚨 2. Incident Response & Rollback
 
-1. `ci.yml` uruchamia testy ponownie.
-2. Buduje obraz i pushuje do GHCR z **immutable tag = SHA commitu**.
-3. Publikuje wynik.
+### How to execute a Rollback
+If a deployment is "Green" but the app behaves incorrectly:
+1. Go to **Azure Portal** $\rightarrow$ **Container App** $\rightarrow$ **Revisions**.
+2. Select the last known stable revision.
+3. Set **Traffic Split** to $100\%$ for that stable revision.
+4. **Result**: Immediate recovery (Recovery Time Objective $\approx$ 10 seconds).
 
-Czego sprawdzam:
-- Tag to pełny SHA (40 znaków hex), **nie** `latest`.
-- Obraz istnieje w GHCR i ma digest.
-- Brak zmiennych-sekretów w definicji pipeline (OIDC only).
-- Pipeline trwa < 10 min.
-
-Jeśli utnie się:
-- Build fail → sprawdź Dockerfile i deps (`npm ci`).
-- Push fail → sprawdź write access (OIDC).
-- Tag fail → sprawdź `docker/metadata-action`.
+### Rollback Log
+All rollback events are recorded in [`docs/rollback-log.md`](docs/rollback-log.md) to analyze the root cause.
 
 ---
 
-## Faza 3 — CD (deploy + smoke)
+## 🔍 3. Troubleshooting & Lessons Learned (The "War Room")
 
-1. `cd.yml` uruchamia się po CI.
-2. Loguje się do Azure z OIDC (bez sekretu).
-3. Wdraża obraz jako nową rewizję.
-4. Czeka na zdrowie.
-5. Smoke:
-   - `GET /health` → 200
-   - `GET /ready` → 200
-6. Wyświetla listę rewizji.
+This section documents real-world issues encountered during the development of Azulab.
 
-Czego sprawdzam:
-- Nowa rewizja jest **Healthy**.
-- Ingress **target port** pasuje do aplikacji (u nas `8080` dla realnej appki).
-- Liveness probe `/health` na `8080`.
-- Readiness probe `/ready` na `8080`.
-- Smoke `/health` → 200 w < 60 s.
-- `/ready` → 200 po pierwszych sukcesach (successThreshold).
-- `/api/message` → odpowiedź z Key Vault.
-- `/api/blobs` → zapis/odczyt/listowanie/usuwanie.
+### 🪤 Trap 1: The "Missing Files" Error
+**Symptom**: `Cannot GET /` or `404 Not Found` despite a green pipeline.
+**Root Cause**: The `Dockerfile` used `COPY src ./src` but missed `COPY public ./public`. Because the build context was set to the `./app` folder, the files existed locally but never entered the image.
+**Fix**: Always ensure all static asset folders are explicitly copied in the `Dockerfile`.
 
-Jeśli utnie się:
-- Unhealthy → sprawdź probe (port/path), potem logi.
-- `/ready` 503 → Key Vault, RBAC, `KEY_VAULT_URL`, `AZURE_CLIENT_ID`.
-- Blob 401/403 → sprawdź managed identity + RBAC storage.
-- Timeout → ingress target port, cold start.
+### ⏳ Trap 2: The "Identity Lag" (403 Forbidden)
+**Symptom**: The app starts, but logs show `403 Forbidden` when accessing Key Vault.
+**Root Cause**: Azure Managed Identities can take 30-60 seconds to propagate across the Azure Active Directory (Entra ID) after being created or assigned.
+**Fix**: Implement a retry mechanism in the app or wait 1 minute before the first health check.
+
+### ⚠️ Trap 3: Infrastructure Drift
+**Symptom**: `terraform apply` wants to destroy and recreate a resource you manually edited in the portal.
+**Root Cause**: Manual changes in the Azure Portal create "Drift". Terraform's state file no longer matches reality.
+**Fix**: **NEVER** edit production resources manually. Always update the `.tf` files and apply via the pipeline.
 
 ---
 
-## Faza 4 — Rollback (obowiązkowy trening)
+## 📈 4. Health Check Definitions
 
-1. Wdróż v2 (zmiana komunikatu).
-2. Wdróż v3 z zepsutym `/health`.
-3. Obserwuj, czy platforma się czerwoni albo `Unhealthy`.
-4. Cofnij:
-   - activate previous revision
-   - albo redeploy previous SHA.
-5. Weryfikuj `/health` 200 i `/ready` 200.
-6. Zapisz czas w `docs/rollback-log.md`.
-
-Czego sprawdzam:
-- Czas od wykrycia do przywrócenia (cel: < 5 min).
-- Brak spadku ruchu (jeśli staging → prod, sprawdź smoke po rollbacku).
-- Poprzednia rewizja widoczna i dostępna.
-
----
-
-## Faza 5 — Po deployu
-
-- [ ] `terraform plan` nie pokazuje nieoczekiwanych zmian (drift).
-- [ ] Zasoby w portalu widoczne i policy correct:
-  - RG
-  - Container App
-  - Environment
-  - Storage
-  - Key Vault
-  - Log Analytics
-  - App Insights
-  - Managed Identity
-  - Role assignments.
-- [ ] Orphan Log Analytics usunięty.
-- [ ] Budget alert ustawiony (mail lub portal).
-- [ ] Koszt dnia zapisany (screenshot).
-
----
-
-## Trzy częste błędy i co zrobić
-
-1. **Zły target port / sonda**  
-   Objaw: app mówi `Listening on :8080`, ingress targetuje `80`.  
-   Fix: spójnie app + ingress + sonda.
-
-2. **Brak managed identity w Azure SDK**  
-   Objaw: `ManagedIdentityCredential: Unable to load proper Managed Identity`.  
-   Fix: Container App ma user-assigned identity i env `AZURE_CLIENT_ID`.
-
-3. **Storage list fails, upload działa**  
-   Objaw: `getBlobClient` tworzy Block Blob Client z `undefined`.  
-   Fix: tworzyć Block Blob Client dopiero, gdy masz `name`.
-
----
-
-## Co i jak zapisywać na rozmowę
-
-- Każdy deploy = commit SHA.
-- Rollback = czas + co zepsuliśmy + jak zapobiec.
-- Koszt = screenshot + kwota.
-- Dobro customy = „hands-on lab, not enterprise production" (uczciwe ograniczenie).
-
-## Szybka ściąga przy stole
-
-- `/health`: sonda liveness, czy proces żyje.
-- `/ready`: czy gotowy na ruch (Key Vault, config, managed identity).
-- `/api/message`: sekret z Key Vault przez managed identity.
-- `/api/blobs`: CRUD na plikach z RBAC.
-- rollback: aktywuj poprzednią rewizję.
-- OIDC: issuer + subject + audience, bez sekretu.
-- managed identity: no secret, ID card.
-- RBAC: najmniejsze możliwe uprawnienie.
-- scale-to-zero: zero ruchu = zero compute cost.  
-EOF
-echo "runbook.md written"
+| Endpoint | Type | Purpose | Failure Action |
+| :--- | :--- | :--- | :--- |
+| `/health` | Liveness | Is the Node.js process running? | Azure restarts the container. |
+| `/ready` | Readiness | Can the app reach Key Vault & Storage? | Azure stops sending traffic to this revision. |
+| `/api/message`| Smoke | Is the business logic returning a valid JSON? | Pipeline marks deployment as failed. |
