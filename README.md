@@ -1,89 +1,73 @@
-# azulab
+# Azulab — Modern Cloud Native Bootstrap
 
-A small, intentionally simple HTTP service used as a portfolio piece for an Azure +
-CI/CD conversation. The point is not the app — it is the **end-to-end, defensible
-delivery pipeline** around it: infrastructure as code, OIDC-based deployment with no
-stored secrets, immutable image tags, scale-to-zero compute, Key Vault, RBAC, and a
-documented rollback.
+> **Disclaimer:** This is a hands-on personal lab project designed to test and demonstrate modern Enterprise DevOps & Cloud Native patterns (IaC, Zero-Trust Security, GitOps/CI/CD, and Observability). It is not intended for heavy production workloads.
 
-> Line kept on every artifact: *hands-on personal lab — not enterprise production.
-> Here is exactly what it does and does not prove.*
+---
 
-## Architecture
+## 🎯 Overview
 
-- **App** (`app/`): Node.js 22 + Express, v0.2.  Endpoints: `/health`,
-  `/ready`, `/api/message` (reads a secret from Key Vault via managed identity),
-  `/api/blobs` (list/upload/download/delete text blobs in a private container),
-  `/metrics`. Structured JSON logs, correlation id, graceful shutdown (SIGTERM).
-- **Infra** (`infra/`): Terraform (azurerm ~4.0). Resource group, Container Apps
-  environment, Container App (scale-to-zero, liveness + readiness probes), Key Vault
-  (RBAC mode), Storage account + private container, user-assigned managed identity,
-  Log Analytics + Application Insights, RBAC assignments, optional budget alert.
-- **CI/CD** (`.github/workflows/`):
-  - `pr.yml` — PR pipeline: lint, unit tests, docker build, terraform fmt/validate.
-  - `ci.yml` — CI pipeline on merge to `main`: tests + build/push immutable image to GHCR.
-  - `cd.yml` — CD pipeline triggered by successful CI: OIDC login, deploy new image
-    revision, smoke test, print revision list for rollback.
+Azulab is a lightweight Node.js web application coupled with a complete, production-grade cloud infrastructure on Microsoft Azure. It serves as a blueprint for how to deliver software safely, securely, and automatically.
 
-Maps to the baseline architecture in
-[Microsoft Learn — Azure Pipelines baseline architecture](https://learn.microsoft.com/en-us/azure/devops/pipelines/architectures/devops-pipelines-baseline-architecture).
+### Key Highlights
+- **Infrastructure as Code (IaC):** 100% managed via Terraform.
+- **Zero-Trust Security:** No hardcoded secrets. Authentication via **OpenID Connect (OIDC)** in GitHub Actions and authorization via **Azure Managed Identity (RBAC)**.
+- **Automated CI/CD:** Three-stage pipeline (PR validation, immutable image building with SHA tags, automated deployment and smoke tests).
+- **Interactive Cloud State:** Hybrid configuration leveraging **Azure Key Vault** for static secrets and **Azure Blob Storage** for dynamic broadcast messages with real-time web UI.
+- **High Availability & Resilience:** Zero-downtime deployments and rapid Rollback capabilities using Azure Container Apps revisions.
 
-## Run locally
+---
 
-```sh
+## 🏗️ Architecture & Tech Stack
+
+- **Cloud Provider:** Microsoft Azure (`Poland Central`)
+- **Compute:** Azure Container Apps (ACA) with Scale-to-Zero and Revision Management.
+- **Storage:** Azure Blob Storage (Document/Message state) & Azure Key Vault (System secrets).
+- **Observability:** Azure Log Analytics & Application Insights.
+- **Automation:** GitHub Actions (OIDC integration, no stored credentials).
+- **Application:** Node.js 22 (Express.js, Pino structured logs, Metrics) with a minimalist Editorial Design frontend.
+
+---
+
+## 📂 Documentation & Deep Dives
+
+To fully understand the design decisions, deployment procedures, and security model, please refer to the following documents inside the `docs/` folder:
+
+1. **[Deployment Runbook (`docs/runbook.md`)](docs/runbook.md)**
+   - Step-by-step guide on what is checked before a push, during PR, CI, CD, and how to execute a Rollback Drill.
+2. **[Security Architecture (`docs/security.md`)](docs/security.md)**
+   - Detailed explanation of OIDC federation, Managed Identities, Least Privilege RBAC, and data flow.
+3. **[Interview & Architecture Q&A (`docs/questions.md`)](docs/questions.md)**
+   - Bank of 15 practical architectural questions mapped directly to files in the repository in plain language.
+4. **[Rollback Log (`docs/rollback-log.md`)](docs/rollback-log.md)**
+   - Incident response record and time-to-recovery metrics.
+
+---
+
+## 🚀 Quick Start / Local Development
+
+### Prerequisites
+- Node.js 22+
+- Docker
+- Azure CLI & Terraform (if provisioning infra)
+
+### 1. Run Locally
+```bash
 cd app
-npm ci
+npm install
+npm start
+```
+The app will run on `http://localhost:8080`.
+
+### 2. Run Tests
+```bash
+cd app
 npm test
-npm start   # http://localhost:8080/health
 ```
 
-Docker:
+---
 
-```sh
-docker build -t azulab:local app
-docker run --rm -p 8080:8080 azulab:local
-```
+## 🔄 CI/CD & Deployment Flow
 
-## Provision infrastructure (once)
-
-Prerequisites: `az` logged in, `terraform` installed.
-
-```sh
-cd infra
-terraform init
-terraform plan -var="image=mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
-terraform apply
-```
-
-Outputs include the Container App URL and the managed identity client id. The app
-reads `KEY_VAULT_URL`, `STORAGE_ACCOUNT_URL` etc. from environment (set by
-Terraform) and uses `DefaultAzureCredential`.
-
-## GitHub Actions secrets/variables
-
-OIDC (no client secret). Create an Entra app registration with a federated
-credential for this repository and set repository **variables** (not secrets):
-
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
-- `AZURE_RESOURCE_GROUP`
-- `AZURE_CONTAINER_APP`
-- `AZURE_CONTAINER_APP_FQDN`
-
-Helper: `scripts/setup-oidc.sh`.
-
-## Rollback
-
-See `docs/rollback.md`. One-command revision activation:
-
-```sh
-az containerapp revision list  -n "$APP" -g "$RG" -o table
-az containerapp revision activate -n "$APP" -g "$RG" --revision <previous-revision>
-```
-
-## Cost
-
-Scale-to-zero Container App, LRS storage, pay-per-token for insights. Budget alert
-at 30 EUR/month via Terraform (optional, set `budget_alert_email`).
-Credit window ends ~2026-11-27.
+1. **Pull Request (`pr.yml`):** Runs linter, unit tests, Docker build verification, and Terraform validation.
+2. **Continuous Integration (`ci.yml`):** Builds the immutable container image tagged with the Git commit SHA and pushes it to GitHub Container Registry (GHCR).
+3. **Continuous Deployment (`cd.yml`):** Authenticates via OIDC (no secrets), updates the Azure Container App, and executes automated **Smoke Tests** (`/health`, `/ready`, `/api/message`).
