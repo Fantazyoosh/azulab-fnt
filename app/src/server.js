@@ -84,6 +84,8 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
   });
 
   // Structured request log + metrics.
+  app.use(express.static("public"));
+
   app.use((req, res, next) => {
     const start = Date.now();
     res.on("finish", () => {
@@ -102,7 +104,6 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     });
     next();
   });
-
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
@@ -122,7 +123,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
 
   app.get("/api/message", async (_req, res) => {
     if (!cfg.storageAccountUrl) {
-      return res.json({ message: `${state.secretCache} (V4)`, source: "env" });
+      return res.json({ message: `${state.secretCache} (Sekret z Vault)`, source: "vault" });
     }
     try {
       const { container } = getBlobClient(cfg);
@@ -132,10 +133,9 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
       for await (const chunk of download.readableStreamBody) {
         content += chunk.toString();
       }
-      res.json({ message: content || state.secretCache, source: "blob_storage" });
+      res.json({ message: content || state.secretCache, source: "blob" });
     } catch (err) {
-      // Fallback to Key Vault if blob doesn't exist or fails
-      res.json({ message: `${state.secretCache} (V4)`, source: cfg.keyVaultUrl ? "keyvault" : "env" });
+      res.json({ message: `${state.secretCache} (Sekret z Vault)`, source: "vault" });
     }
   });
 
