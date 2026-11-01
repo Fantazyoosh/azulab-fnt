@@ -2,35 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azulab Cloud Message</title>
+    <meta name="viewport" content="width=device-width, initial-// la l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: 1.0">
+    <title>Azulab | Cloud Message</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .gradient-text {
-            background: linear-gradient(to right, #38bdf8, #818cf8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+        body { 
+            background-color: #0f172a; 
+            color: #cbd5e1; 
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
+        .editorial-border {
+            border-top: 1px solid #334155;
+            border-bottom: 1px solid #334155;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen p-4">
-    <div class="// glass max-w-2xl w-full p-8 rounded-3xl glass shadow-2xl text-center">
-        <h1 class="text-sm uppercase tracking-widest text-slate-400 mb-2">Cloud Message Broadcast</h1>
-        <div id="message-display" class="text-4xl md:text-6xl font-bold mb-8 gradient-text min-h-[1.5em]">
-            Loading...
-        </div>
-        <div class="flex gap-2">
-            <input type="text" id="message-input" 
-                placeholder="Type a message and press Enter..." 
-                class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all">
-            <button id="send-btn" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-xl font-medium transition-all">
-                Send
+<body class="flex items-center justify-center min-h-screen p-6">
+    <div class="max-w-3xl w-full">
+        <!-- Header -->
+        <div class="flex justify-between items-end mb-12">
+            <div>
+                <h1 class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold mb-1">System Status: Operational</h1>
+                <p class="text-2xl font-light text-slate-200 tracking-tight">Azulab Cloud Broadcast</p>
+            </div>
+            <button id="refresh-btn" class="text-xs uppercase tracking-widest text-slate-500 hover:text-white transition-colors duration-300 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-// l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: 9 9 0 0 1 9 0z"/><path d="M21 3v5h-5"/></svg>
+                Refresh
             </button>
         </div>
-        <div id="source-indicator" class="mt-4 text-xs text-slate-500 font-mono">
-            Checking source...
+
+        <!-- Main Message Area -->
+        <div class="editorial-border py-12 mb-12 text-center">
+            <div id="message-display" class="text-4xl md:text-5xl font-light text-slate-100 leading-tight transition-all duration-500">
+                Loading...
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="max-w-md mx-auto">
+            <div class="relative group">
+                <input type="text" id="message-input" 
+                    placeholder="Enter new broadcast message..." 
+                    class="w-full bg-transparent border-b border-slate-700 py-3 px-0 text-lg text-slate-200 focus:outline-none focus:border-slate-400 transition-all duration-500 placeholder:text-slate-600">
+                <button id="send-btn" class="absolute right-0 bottom-3 text-xs uppercase tracking-widest text-slate-500 hover:text-white transition-colors duration-300">
+                    Update
+                </button>
+            </div>
+            <div id="source-indicator" class="mt-4 text-[10px] uppercase tracking-widest text-slate-600 mono text-center">
+                Initializing...
+            </div>
         </div>
     </div>
 
@@ -39,23 +64,24 @@
         const msgInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
         const sourceInd = document.getElementById('source-indicator');
+        const refreshBtn = document.getElementById('refresh-btn');
 
         async function updateMessage() {
             try {
                 const res = await fetch('/api/message');
                 const data = await res.json();
                 
-                const sourceLabel = data.source === 'blob' ? '☁️ Cloud Storage' : '🔐 Key Vault';
-                const finalMsg = data.message;
+                const sourceLabel = data.source === 'blob' ? 'Source: Azure Blob Storage' : 'Source: Azure Key Vault';
                 
-                // Update page content
-                msgDisplay.innerText = finalMsg;
-                // Update tab title
-                document.title = finalMsg;
-                // Update source indicator
-                sourceInd.innerText = `Source: ${sourceLabel}`;
+                msgDisplay.classList.remove('fade-in');
+                void msgDisplay.offsetWidth; // trigger reflow
+                msgDisplay.innerText = data.message;
+                msgDisplay.classList.add('fade-in');
+                
+                document.title = data.message;
+                sourceInd.innerText = sourceLabel;
             } catch (err) {
-                msgDisplay.innerText = "Error loading message";
+                msg// la l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: Display.innerText = "Connection Error";
                 console.error(err);
             }
         }
@@ -79,11 +105,10 @@
 
         sendBtn.onclick = sendMessage;
         msgInput.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
+        refreshBtn.onclick = updateMessage;
 
-        // Initial load
         updateMessage();
-        // Poll every 10 seconds for updates from other users
-        setInterval(updateMessage, 10000);
+        setInterval(updateMessage, 15000);
     </script>
 </body>
 </html>
