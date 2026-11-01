@@ -1,6 +1,6 @@
 # Bank pytań w prostym języku (15)
 
-Służy rozmowie z Rafałem. Przy każdym pytaniu jest ścieżka do pliku, gdzie znajdziesz dowód. Nie recytuj — pokaż plik.
+Służy do autoweryfikacji i przygotowania do prezentacji projektu. Przy każdym pytaniu jest ścieżka do pliku, gdzie znajdziesz dowód. Nie recytuj — pokaż plik.
 
 Skróty rozszerzone na start:  
 **IaC** = infrastruktura jako kod (Terraform), **CI/CD** = automatyczne testy i wdrożenia, **RBAC** = kontrola dostępu oparta o role, **OIDC** = logowanie bez zapisanego hasła, **Container App** = usługa uruchamiająca kontener, **Key Vault** = sejf na sekrety, **Blob** = chmura na pliki, **managed identity** = legitymacja aplikacji.
