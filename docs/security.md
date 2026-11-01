@@ -4,7 +4,29 @@ This document explains the security choices made in Azulab. The goal was to achi
 
 ---
 
+## 📦 Data Model & Entities
+
+Before diving into security, it's important to understand the data model. In Azulab, we distinguish between **Infrastructure Resources** (the "where") and **Application Entities** (the "what").
+
+### 1. Application Entities
+An **Entity** is a conceptual object that represents a real-world piece of data.
+- **Message Entity**: The core object of this app. It consists of:
+    - `content`: The actual text of the broadcast.
+    - `source`: Where the data came from (`blob` or `vault`).
+    - `timestamp`: When it was last updated.
+- **Configuration Entity**: A internal object managing the cloud settings (URLs, Client IDs).
+
+### 2. Infrastructure Resources
+Unlike entities, these are the cloud components that host the app:
+- **Azure Container App**: The compute resource (the "home" for the code).
+- **Key Vault**: The security resource for secrets.
+- **Blob Storage**: The storage resource for dynamic state.
+
+---
+
 ## 🔑 The Core Philosophy: No More Secrets
+
+In traditional apps, you often see `.env` files with passwords. In Enterprise DevOps, this is a critical vulnerability. Azulab solves this using three pillars:
 
 In traditional apps, you often see `.env` files with passwords. In Enterprise DevOps, this is a critical vulnerability. Azulab solves this using three pillars:
 
