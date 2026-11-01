@@ -10,6 +10,7 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
+COPY public ./public
 EXPOSE 8080
 USER node
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
