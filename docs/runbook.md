@@ -6,28 +6,40 @@ This runbook provides a standard operating procedure (SOP) for managing the Azul
 
 ## 🛠️ 1. The Deployment Lifecycle
 
-### Phase A: Pre-Push (Local Validation)
-Before pushing code, every change must be validated locally:
-- [ ] **Linting**: Ensure no syntax errors in `server.js`.
-- [ ] **Terraform Plan**: Run `terraform plan` to ensure infrastructure changes are expected.
-- [ ] **Docker Context**: Verify that all necessary folders (e.g., `/public`) are included in the `Dockerfile` and not ignored by `.dockerignore`.
+### The Deployment Layer (CI/CD Flow)
+The project uses a high-automation deployment layer to move code from Git to Azure.
 
-### Phase B: Pull Request (The Gatekeeper)
-Once a PR is opened, the following automated checks must pass:
-- **Unit Tests**: Validation of core logic.
-- **Build Check**: A trial Docker build to ensure the image is valid.
-- **TFLint**: Validation of Terraform syntax.
+**Step 1: Continuous Integration (CI)**
+- **Validation**: Every push triggers unit tests in `/app/test`.
+- **Immutable Builds**: A Docker image is built and tagged with the specific **Git Commit SHA**. We avoid using the `latest` tag to ensure we know exactly which version is running.
+- **Registry**: Images are stored in GHCR (GitHub Container Registry).
 
-### Phase C: Continuous Deployment (The Rollout)
-Upon merge to `main`, the CD pipeline triggers:
-1. **OIDC Auth**: Securely connects GitHub to Azure.
-2. **Image Push**: Pushes an immutable image (tagged with Git SHA) to GHCR.
-3. **Revision Update**: Azure Container Apps creates a new revision.
-4. **Smoke Tests**: The pipeline pings `/health`, `/ready`, and `/api/message`. If any fail, the deployment is marked as failed.
+**Step 2: Continuous Deployment (CD)**
+- **Zero-Trust Auth**: The pipeline connects to Azure using **OIDC**, eliminating the need for stored client secrets.
+- **Revision Management**: Azure Container Apps creates a new **Revision** for every deploy. This allows us to keep the old version running while the new one starts.
+
+**Step 3: Verification (The Safe-Switch)**
+- **Smoke Testing**: The pipeline pings `/health` and `/ready` endpoints.
+- **Traffic Shifting**: Traffic is only shifted to the new revision if smoke tests pass. This ensures **Zero-Downtime Deployments**.
 
 ---
 
-## 🚨 2. Incident Response & Rollback
+## 🏗️ 2. Infrastructure as Code (Terraform)
+
+Azulab uses Terraform to ensure the infrastructure is versioned, reproducible, and documented.
+
+### The Terraform Lifecycle
+1. **Definition**: Infrastructure is defined in `.tf` files.
+2. **Plan (`terraform plan`)**: Before any change, we generate a plan to see exactly what will be created, modified, or destroyed. This prevents accidental deletions.
+3. **Apply (`terraform apply`)**: The approved plan is executed, and Azure resources are updated to match the code.
+
+### State Management & Drift
+- **Remote State**: The `terraform.tfstate` file (the "map" of the infrastructure) is stored remotely. This allows the GitHub Actions pipeline to know the current state of the cloud without needing local files.
+- **Infrastructure Drift**: If a resource is changed manually in the Azure Portal, it creates "Drift". Terraform detects this during the next `plan` and offers to revert the manual change back to the coded state.
+
+---
+
+## 🚨 3. Incident Response & Rollback
 
 ### How to execute a Rollback
 If a deployment is "Green" but the app behaves incorrectly:
@@ -41,7 +53,7 @@ All rollback events are recorded in [`docs/rollback-log.md`](docs/rollback-log.m
 
 ---
 
-## 🔍 3. Troubleshooting & Lessons Learned (The "War Room")
+## 🔍 4. Troubleshooting & Lessons Learned (The "War Room")
 
 This section documents real-world issues encountered during the development of Azulab.
 
@@ -62,7 +74,7 @@ This section documents real-world issues encountered during the development of A
 
 ---
 
-## 📈 4. Health Check Definitions
+## 📈 5. Health Check Definitions
 
 | Endpoint | Type | Purpose | Failure Action |
 | :--- | :--- | :--- | :--- |
@@ -72,7 +84,7 @@ This section documents real-world issues encountered during the development of A
 
 ---
 
-## ⚙️ 5. Pipeline Behavior: The "Trigger" Lesson
+## ⚙️ 6. Pipeline Behavior: The "Trigger" Lesson
 
 ### Why does a documentation change trigger a full Azure deploy?
 You may notice that updating a `.md` file in `/docs` still triggers the full CI/CD pipeline. This is because the GitHub Actions trigger is currently set to the **repository level** (`on: push`), not the **folder level**.
@@ -93,5 +105,5 @@ on:
 ```
 
 **The Trade-off:**
-- **Current State:** Every push is a "smoke test" for the pipeline. We know the deployment process works 100% of the time.
-- **Optimized State:** Faster feedback loop and lower compute costs, but the pipeline is tested less frequently.
+- **Current State**: Every push is a "smoke test" for the pipeline. We know the deployment process works 100% of the time.
+- **Optimized State**: Faster feedback loop and lower compute costs, but the pipeline is tested less frequently.
