@@ -1,48 +1,56 @@
-# Security notes
+# 🛡️ Security Architecture: Zero-Trust Model
 
-## What this project does
+This document explains the security choices made in Azulab. The goal was to achieve a **Zero-Trust Architecture**, meaning we never trust a secret based on where it is stored, but rather based on the **Identity** of the requester.
 
-- **No stored cloud secrets in CI/CD.** GitHub Actions authenticates to Azure with
-  OIDC (workload identity federation) via `azure/login@v2`. The only values stored
-  are non-secret identifiers (`client id`, `tenant id`, `subscription id`).
-- **App secrets in Key Vault.** The Container App's user-assigned managed identity
-  has `Key Vault Secrets User`. The app reads the secret at startup through
-  `DefaultAzureCredential`.
-- **Blob access via RBAC.** The same identity has `Storage Blob Data Contributor`
-  on the storage account. The container is private; shared-key access is not used.
-- **TLS-only storage**, minimum TLS 1.2, public blob access disabled.
-- **Network policy is explicit.** By default the storage account is reachable. To
-  deny everyone except approved ranges, set `allowed_storage_ip_ranges` and Terraform
-  switches `default_action` to `Deny`.
+---
 
-## geo-blocking question ("how to stop people from Russia using the blob")
+## 🔑 The Core Philosophy: No More Secrets
 
-Azure Storage network rules are an **IP allow-list, not a country filter**. There
-is no native country rule on a storage account. Three realistic options, from
-cheapest to most expensive:
+In traditional apps, you often see `.env` files with passwords. In Enterprise DevOps, this is a critical vulnerability. Azulab solves this using three pillars:
 
-1. **Front Door / CDN WAF geomatch rule** — the one EPAM-style answer. Put Azure
-   Front Door in front of the storage (or the app), add a WAF custom rule with
-   `GeoMatch` on country code `RU` (and others) set to Block/Redirect. Cost:
-   Front Door standard tier + rule evaluations. This is where country-level
-   filtering actually belongs, because it is an edge concern, not a storage
-   concern.
-2. **Application-level gating** — check `CF-IPCountry` / `X-Forwarded-For`? Only if
-   you control routing; not trustworthy on its own. Use only as defence in depth.
-3. **Private endpoint + no public access** — kills the problem entirely by
-   removing public reachability, at the cost of needing a VNet/VPN for legit
-   access. Right answer for sensitive data; wrong answer for a public portfolio
-   app.
+### 1. OIDC (OpenID Connect) — The Trust Bridge
+**The Problem:** How does GitHub Actions tell Azure "I am the official pipeline for this project" without using a long-lived Client Secret?
 
-The reason storage accounts do not ship country rules: they are a data plane, and
-the platform expects edge/WAF to own geography. Saying "I added an IP list to the
-storage account" in an interview is a red flag; saying "storage doesn't do geo,
-Front Door WAF geomatch is the right layer, here is the cost" is the right
-answer.
+**The Solution:** **OIDC Federation**.
+- GitHub issues a temporary JWT token.
+- Azure validates this token against the trusted GitHub provider.
+- Azure grants a short-lived access token for the deployment.
 
-## honesty line
+**Why?** If a hacker steals your GitHub Actions logs, there is no permanent password to steal.
 
-This is a personal lab, not enterprise production. No SLA, no HA across zones,
-no private networking, no formal threat model. The security claims above are
-configuration facts, provable from `terraform show` and the role-assignment
-output.
+### 2. Managed Identity — The "Passport"
+**The Problem:** Once the app is running in Azure, how does it authenticate with Key Vault or Storage?
+
+**The Solution:** **User-Assigned Managed Identity**.
+- The Container App is assigned a unique Identity (similar to a service account).
+- Azure internally handles the rotation of certificates.
+- The app uses `DefaultAzureCredential` from the SDK, which automatically finds this identity.
+
+**Why?** No credentials ever exist in the code, the Docker image, or the environment variables.
+
+### 3. RBAC (Role-Based Access Control) — Least Privilege
+**The Problem:** Should the app have "Admin" access to everything in the subscription?
+
+**The Solution:** **Least Privilege Roles**.
+- `Key Vault Secrets User`: Can read secrets, but cannot delete the Vault.
+- `Storage Blob Data Contributor`: Can read/write blobs, but cannot change network rules.
+
+**Why?** If the application is compromised, the attacker is limited to only these specific actions.
+
+---
+
+## 📊 Security Summary Table
+
+| Vulnerability | Legacy Approach | Azulab Approach | Result |
+| :--- | :--- | :--- | :--- |
+| **Credential Leak** | Store secret in GitHub Secrets | **OIDC Federation** | ❌ No secrets to leak |
+| **Identity Theft** | App uses a username/password | **Managed Identity** | ❌ No password to steal |
+| **Over-privilege** | Subscription Contributor | **RBAC Roles** | ❌ Limited attack surface |
+| **Secret Exposure** | Secrets in `.env` or config | **Azure Key Vault** | ❌ Encrypted at rest |
+
+---
+
+## 🛠️ Verification Flow
+To verify that this is working, look at:
+- `infra/main.tf`: See the `azurerm_user_assigned_identity` and `azurerm_role_assignment` resources.
+- `app/src/server.js`: See the use of `@azure/identity` and `DefaultAzureCredential`.
