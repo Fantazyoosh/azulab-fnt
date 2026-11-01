@@ -141,14 +141,18 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
 
   app.post("/api/message", async (req, res) => {
     const { message } = req.body || {};
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "invalid_input", message: "text message is required" });
-    }
     if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
+
     try {
       const { container } = getBlobClient(cfg);
       const block = container.getBlockBlobClient("current_message.txt");
       await container.createIfNotExists();
+
+      if (!message || typeof message !== "string" || message.trim() === "") {
+        await block.deleteIfExists();
+        return res.status(200).json({ success: true, message: "Message cleared, falling back to Key Vault" });
+      }
+
       await block.uploadData(Buffer.from(message, "utf8"), {
         blobHTTPHeaders: { blobContentType: "text/plain; charset=utf-8" },
       });
