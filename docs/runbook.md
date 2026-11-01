@@ -39,7 +39,26 @@ Azulab uses Terraform to ensure the infrastructure is versioned, reproducible, a
 
 ---
 
-## 🚨 3. Incident Response & Rollback
+## 🛡️ 3. Trust Chain & Security (Zero-Trust)
+
+The project implements a multi-layered security model to eliminate the need for hardcoded credentials.
+
+### GitHub $\rightarrow$ Azure (OIDC)
+Instead of storing a Client Secret in GitHub, we use **OpenID Connect (OIDC)**. GitHub issues a temporary token that Azure validates, granting short-lived access to the deployment pipeline.
+
+### Application Identity (Managed Identity & RBAC)
+The app does not use passwords to access Azure services:
+- **Managed Identity**: The Container App is assigned a unique identity (a "digital passport").
+- **RBAC (Role-Based Access Control)**: This identity is granted specific, limited roles:
+    - `Key Vault Secrets User`: Read-only access to secrets.
+    - `Storage Blob Data Contributor`: Access to read/write broadcast messages.
+
+### Environment Variables
+We use **Environment Variables** to store non-sensitive configuration (e.g., `KEYVAULT_URL`, `STORAGE_ACCOUNT_URL`). The app reads these URLs and then uses its Managed Identity to authenticate.
+
+---
+
+## 🚨 4. Incident Response & Rollback
 
 ### How to execute a Rollback
 If a deployment is "Green" but the app behaves incorrectly:
@@ -53,7 +72,7 @@ All rollback events are recorded in [`docs/rollback-log.md`](docs/rollback-log.m
 
 ---
 
-## 🔍 4. Troubleshooting & Lessons Learned (The "War Room")
+## 🔍 5. Troubleshooting & Lessons Learned (The "War Room")
 
 This section documents real-world issues encountered during the development of Azulab.
 
@@ -74,7 +93,7 @@ This section documents real-world issues encountered during the development of A
 
 ---
 
-## 📈 5. Health Check Definitions
+## 📈 6. Health Check Definitions
 
 | Endpoint | Type | Purpose | Failure Action |
 | :--- | :--- | :--- | :--- |
@@ -84,7 +103,7 @@ This section documents real-world issues encountered during the development of A
 
 ---
 
-## ⚙️ 6. Pipeline Behavior: The "Trigger" Lesson
+## ⚙️ 7. Pipeline Behavior: The "Trigger" Lesson
 
 ### Why does a documentation change trigger a full Azure deploy?
 You may notice that updating a `.md` file in `/docs` still triggers the full CI/CD pipeline. This is because the GitHub Actions trigger is currently set to the **repository level** (`on: push`), not the **folder level**.
@@ -103,7 +122,3 @@ on:
       - 'docs/**'
       - 'README.md'
 ```
-
-**The Trade-off:**
-- **Current State**: Every push is a "smoke test" for the pipeline. We know the deployment process works 100% of the time.
-- **Optimized State**: Faster feedback loop and lower compute costs, but the pipeline is tested less frequently.
