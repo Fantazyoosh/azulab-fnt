@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azulab Cloud Message</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .gradient-text {
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="// glass max-w-2xl w-full p-8 rounded-3xl glass shadow-2xl text-center">
+        <h1 class="text-sm uppercase tracking-widest text-slate-400 mb-2">Cloud Message Broadcast</h1>
+        <div id="message-display" class="text-4xl md:text-6xl font-bold mb-8 gradient-text min-h-[1.5em]">
+            Loading...
+        </div>
+        <div class="flex gap-2">
+            <input type="text" id="message-input" 
+                placeholder="Type a message and press Enter..." 
+                class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all">
+            <button id="send-btn" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-xl font-medium transition-all">
+                Send
+            </button>
+        </div>
+        <div id="source-indicator" class="mt-4 text-xs text-slate-500 font-mono">
+            Checking source...
+        </div>
+    </div>
+
+    <script>
+        const msgDisplay = document.getElementById('message-display');
+        const msgInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const sourceInd = document.getElementById('source-indicator');
+
+        async function updateMessage() {
+            try {
+                const res = await fetch('/api/message');
+                const data = await res.json();
+                
+                const sourceLabel = data.source === 'blob' ? '☁️ Cloud Storage' : '🔐 Key Vault';
+                const finalMsg = data.message;
+                
+                // Update page content
+                msgDisplay.innerText = finalMsg;
+                // Update tab title
+                document.title = finalMsg;
+                // Update source indicator
+                sourceInd.innerText = `Source: ${sourceLabel}`;
+            } catch (err) {
+                msgDisplay.innerText = "Error loading message";
+                console.error(err);
+            }
+        }
+
+        async function sendMessage() {
+            const text = msgInput.value.trim();
+            try {
+                const res = await fetch('/api/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                if (res.ok) {
+                    msgInput.value = '';
+                    await updateMessage();
+                }
+            } catch (err) {
+                alert("Failed to send message");
+            }
+        }
+
+        sendBtn.onclick = sendMessage;
+        msgInput.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
+
+        // Initial load
+        updateMessage();
+        // Poll every 10 seconds for updates from other users
+        setInterval(updateMessage, 10000);
+    </script>
+</body>
+</html>
