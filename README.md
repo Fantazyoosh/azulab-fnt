@@ -1,73 +1,69 @@
-# Azulab — Modern Cloud Native Bootstrap
+# 🚀 Azulab — Modern Cloud Native Bootstrap
 
-> **Disclaimer:** This is a hands-on personal lab project designed to test and demonstrate modern Enterprise DevOps & Cloud Native patterns (IaC, Zero-Trust Security, GitOps/CI/CD, and Observability). It is not intended for heavy production workloads.
-
----
-
-## 🎯 Overview
-
-Azulab is a lightweight Node.js web application coupled with a complete, production-grade cloud infrastructure on Microsoft Azure. It serves as a blueprint for how to deliver software safely, securely, and automatically.
-
-### Key Highlights
-- **Infrastructure as Code (IaC):** 100% managed via Terraform.
-- **Zero-Trust Security:** No hardcoded secrets. Authentication via **OpenID Connect (OIDC)** in GitHub Actions and authorization via **Azure Managed Identity (RBAC)**.
-- **Automated CI/CD:** Three-stage pipeline (PR validation, immutable image building with SHA tags, automated deployment and smoke tests).
-- **Interactive Cloud State:** Hybrid configuration leveraging **Azure Key Vault** for static secrets and **Azure Blob Storage** for dynamic broadcast messages with real-time web UI.
-- **High Availability & Resilience:** Zero-downtime deployments and rapid Rollback capabilities using Azure Container Apps revisions.
+> **The "Learning by Doing" Project**
+> This repository is a comprehensive laboratory designed to demonstrate the bridge between simple code and **Enterprise-grade Cloud Infrastructure**. It implements the gold standards of modern DevOps: **Security-First, Infrastructure-as-Code, and Zero-Touch Deployment.**
 
 ---
 
-## 🏗️ Architecture & Tech Stack
+## 🌟 What is Azulab?
 
-- **Cloud Provider:** Microsoft Azure (`Poland Central`)
-- **Compute:** Azure Container Apps (ACA) with Scale-to-Zero and Revision Management.
-- **Storage:** Azure Blob Storage (Document/Message state) & Azure Key Vault (System secrets).
-- **Observability:** Azure Log Analytics & Application Insights.
-- **Automation:** GitHub Actions (OIDC integration, no stored credentials).
-- **Application:** Node.js 22 (Express.js, Pino structured logs, Metrics) with a minimalist Editorial Design frontend.
+At its core, Azulab is a simple "Broadcast Message" app. However, the *real* project is the **ecosystem around it**. 
 
----
+Imagine you are building a system for a bank or a large e-commerce site. You cannot just "upload files via FTP". You need security, audit logs, and the ability to revert a mistake in seconds. **That is exactly what Azulab demonstrates.**
 
-## 📂 Documentation & Deep Dives
-
-To fully understand the design decisions, deployment procedures, and security model, please refer to the following documents inside the `docs/` folder:
-
-1. **[Deployment Runbook (`docs/runbook.md`)](docs/runbook.md)**
-   - Step-by-step guide on what is checked before a push, during PR, CI, CD, and how to execute a Rollback Drill.
-2. **[Security Architecture (`docs/security.md`)](docs/security.md)**
-   - Detailed explanation of OIDC federation, Managed Identities, Least Privilege RBAC, and data flow.
-3. **[Interview & Architecture Q&A (`docs/questions.md`)](docs/questions.md)**
-   - Bank of 15 practical architectural questions mapped directly to files in the repository in plain language.
-4. **[Rollback Log (`docs/rollback-log.md`)](docs/rollback-log.md)**
-   - Incident response record and time-to-recovery metrics.
+### 🗺️ The Big Picture (Data Flow)
+`User` $\rightarrow$ `GitHub PR` $\rightarrow$ `CI/CD Pipeline (OIDC)` $\rightarrow$ `Azure Container Apps` $\rightarrow$ `Managed Identity` $\rightarrow$ `Key Vault / Blob Storage`
 
 ---
 
-## 🚀 Quick Start / Local Development
+## 🛠️ The "Pro" Tech Stack (And why it matters)
 
-### Prerequisites
-- Node.js 22+
-- Docker
-- Azure CLI & Terraform (if provisioning infra)
+| Technology | Role | Why this instead of the "easy" way? |
+| :--- | :--- | :--- |
+| **Terraform** | Infrastructure as Code | To avoid "clicking in the portal". Infrastructure is versioned and reproducible. |
+| **OIDC** | Trust Federation | No more stored passwords/secrets in GitHub. Azure trusts GitHub's identity. |
+| **Managed Identity** | Zero-Trust Auth | The app doesn't "log in" with a password; it *is* the identity. No secrets to leak. |
+| **Azure Container Apps** | Serverless Compute | Scale-to-zero saves money; Revision Management allows instant rollbacks. |
+| **Key Vault** | Secret Management | Secrets are encrypted and audited, not stored in `.env` files. |
+| **Blob Storage** | Dynamic State | Allows updating the app's message without rebuilding or restarting the container. |
 
-### 1. Run Locally
+---
+
+## 📂 Documentation Hub (Your Learning Path)
+
+If you are new to DevOps, follow this order to understand the project:
+
+1. **[The "How-To" Guide (`docs/runbook.md`)](docs/runbook.md)** 
+   $\rightarrow$ *Learn the operational lifecycle: from code change to smoke test.*
+2. **[The Security Blueprint (`docs/security.md`)](docs/security.md)** 
+   $\rightarrow$ *Understand why "Zero-Trust" is the industry standard and how OIDC works.*
+3. **[The Architect's Q&A (`docs/questions.md`)](docs/questions.md)** 
+   $\rightarrow$ *The most important part for interviews. Learn how to justify technical decisions.*
+4. **[The Incident Log (`docs/rollback-log.md`)](docs/rollback-log.md)** 
+   $\rightarrow$ *See how real-world failures are handled and recovered.*
+
+---
+
+## 🚀 Quick Start
+
+### 💻 Local Run (The "Developer" Experience)
 ```bash
 cd app
 npm install
 npm start
 ```
-The app will run on `http://localhost:8080`.
+Visit `http://localhost:8080` to see the UI.
 
-### 2. Run Tests
-```bash
-cd app
-npm test
-```
+### ☁️ Cloud Deploy (The "DevOps" Experience)
+1. Create a branch $\rightarrow$ `git checkout -b feat/my-feature`
+2. Push changes $\rightarrow$ `git push origin feat/my-feature`
+3. Open a **Pull Request** $\rightarrow$ Watch the pipeline validate your code.
+4. **Merge** $\rightarrow$ Watch Azure deploy the new version automatically.
 
 ---
 
-## 🔄 CI/CD & Deployment Flow
-
-1. **Pull Request (`pr.yml`):** Runs linter, unit tests, Docker build verification, and Terraform validation.
-2. **Continuous Integration (`ci.yml`):** Builds the immutable container image tagged with the Git commit SHA and pushes it to GitHub Container Registry (GHCR).
-3. **Continuous Deployment (`cd.yml`):** Authenticates via OIDC (no secrets), updates the Azure Container App, and executes automated **Smoke Tests** (`/health`, `/ready`, `/api/message`).
+## 🎓 What I learned building this
+- **Infrastructure Drift**: How to keep the portal and code in sync.
+- **Principle of Least Privilege**: Granting only the exact permissions needed (RBAC).
+- **Immutable Infrastructure**: Why we use SHA tags instead of `latest` for Docker images.
+- **Observability**: Using structured JSON logs to debug production issues.
