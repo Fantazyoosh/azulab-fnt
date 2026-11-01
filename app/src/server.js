@@ -103,7 +103,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     next();
   });
 
-  app.get("/health-broken", (_req, res) => {
+  app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
 
@@ -121,7 +121,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
   });
 
   app.get("/api/message", (_req, res) => {
-    res.json({ message: `${state.secretCache} (V2)`, source: cfg.keyVaultUrl ? "keyvault" : "env" });
+    res.json({ message: `${state.secretCache} (V4)`, source: cfg.keyVaultUrl ? "keyvault" : "env" });
   });
 
   app.get("/api/blobs", async (_req, res) => {

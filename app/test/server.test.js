@@ -34,14 +34,14 @@ function request(app, method, path, body) {
   });
 }
 
-//test("health returns ok", async () => {
-//  const app = buildApp();
-//  const r = await request(app, "GET", "/health");
-//  assert.equal(r.status, 200);
-//  assert.equal(r.body.status, "ok");
-//  assert.equal(r.body.service, "azulab");
-//  assert.ok(r.headers["x-request-id"], "correlation id is set");
-//});
+test("health returns ok", async () => {
+  const app = buildApp();
+  const r = await request(app, "GET", "/health");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.status, "ok");
+  assert.equal(r.body.service, "azulab");
+  assert.ok(r.headers["x-request-id"], "correlation id is set");
+});
 
 test("ready reflects missing storage/keyvault gracefully", async () => {
   const app = buildApp();
