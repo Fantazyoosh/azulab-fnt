@@ -103,7 +103,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     next();
   });
 
-  app.get("/health", (_req, res) => {
+  app.get("/health-broken", (_req, res) => {
     res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
 
