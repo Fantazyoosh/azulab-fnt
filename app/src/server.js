@@ -120,8 +120,42 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     res.status(ok ? 200 : 503).json({ status: ok ? "ready" : "not_ready", checks });
   });
 
-  app.get("/api/message", (_req, res) => {
-    res.json({ message: `${state.secretCache} (V4)`, source: cfg.keyVaultUrl ? "keyvault" : "env" });
+  app.get("/api/message", async (_req, res) => {
+    if (!cfg.storageAccountUrl) {
+      return res.json({ message: `${state.secretCache} (V4)`, source: "env" });
+    }
+    try {
+      const { container } = getBlobClient(cfg);
+      const block = container.getBlockBlobClient("current_message.txt");
+      const download = await block.download(0);
+      let content = "";
+      for await (const chunk of download.readableStreamBody) {
+        content += chunk.toString();
+      }
+      res.json({ message: content || state.secretCache, source: "blob_storage" });
+    } catch (err) {
+      // Fallback to Key Vault if blob doesn't exist or fails
+      res.json({ message: `${state.secretCache} (V4)`, source: cfg.keyVaultUrl ? "keyvault" : "env" });
+    }
+  });
+
+  app.post("/api/message", async (req, res) => {
+    const { message } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "invalid_input", message: "text message is required" });
+    }
+    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
+    try {
+      const { container } = getBlobClient(cfg);
+      const block = container.getBlockBlobClient("current_message.txt");
+      await container.createIfNotExists();
+      await block.uploadData(Buffer.from(message, "utf8"), {
+        blobHTTPHeaders: { blobContentType: "text/plain; charset=utf-8" },
+      });
+      res.status(201).json({ success: true, message: "Message updated in cloud storage" });
+    } catch (err) {
+      res.status(500).json({ error: "update_failed", message: err.message });
+    }
   });
 
   app.get("/api/blobs", async (_req, res) => {
