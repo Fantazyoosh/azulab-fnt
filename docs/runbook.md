@@ -69,3 +69,29 @@ This section documents real-world issues encountered during the development of A
 | `/health` | Liveness | Is the Node.js process running? | Azure restarts the container. |
 | `/ready` | Readiness | Can the app reach Key Vault & Storage? | Azure stops sending traffic to this revision. |
 | `/api/message`| Smoke | Is the business logic returning a valid JSON? | Pipeline marks deployment as failed. |
+
+---
+
+## ⚙️ 5. Pipeline Behavior: The "Trigger" Lesson
+
+### Why does a documentation change trigger a full Azure deploy?
+You may notice that updating a `.md` file in `/docs` still triggers the full CI/CD pipeline. This is because the GitHub Actions trigger is currently set to the **repository level** (`on: push`), not the **folder level**.
+
+**Current Flow:**
+`Any Change in Repo` $\rightarrow$ `Trigger CD` $\rightarrow$ `Build Image` $\rightarrow$ `Deploy to Azure`.
+
+### How to optimize this (Path Filtering)
+In larger production environments, building a Docker image for a typo fix in the README is a waste of compute resources. This is solved using `paths-ignore`.
+
+**Example Configuration:**
+```yaml
+on:
+  push:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+```
+
+**The Trade-off:**
+- **Current State:** Every push is a "smoke test" for the pipeline. We know the deployment process works 100% of the time.
+- **Optimized State:** Faster feedback loop and lower compute costs, but the pipeline is tested less frequently.
