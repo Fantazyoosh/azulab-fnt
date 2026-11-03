@@ -64,6 +64,8 @@ If you are new to DevOps, follow this order to understand the project:
    $\rightarrow$ *Where the secret lives, how it is read, and what an attacker would find.*
 9. **[Architecture Decisions (`docs/decisions.md`)](docs/decisions.md)** 
    $\rightarrow$ *Twelve trade-offs, each with its cost written down.*
+10. **[The Drill (`docs/drill-rbac-kv.md`)](docs/drill-rbac-kv.md)** 
+    $\rightarrow$ *RBAC, security and Key Vault — answer out loud, then check.*
 
 ---
 
