@@ -34,6 +34,16 @@ that checks a role assignment. There is no password anywhere in the chain.
 - In Kubernetes the deployment sets `AZURE_TOKEN_CREDENTIALS=WorkloadIdentityCredential`,
   so the SDK uses exactly one credential source instead of probing IMDS or the CLI.
 
+### Application-level authentication (Container Apps)
+
+The Container Apps UI is protected by **Easy Auth** with Entra ID: `/health` and
+`/ready` are excluded for probes, every other path requires a session. The client
+secret lives in the Container App secret store, not in Git and not in Terraform.
+
+This is the **one long-lived credential** in the project, and it is a deliberate
+platform constraint — Easy Auth is a confidential client and has no managed
+identity option. AKS stays public and secret-less. See `docs/entra-login.md`.
+
 ### What does not exist
 - No `Secret` object in the cluster.
 - No client secret in GitHub.
