@@ -53,10 +53,9 @@ resource "azurerm_kubernetes_cluster" "main" {
 # The subject is fixed by the namespace and ServiceAccount name in k8s/:
 #   system:serviceaccount:<namespace>:<serviceaccount>
 resource "azurerm_federated_identity_credential" "aks_app" {
-  name                = "aks-azulab"
-  resource_group_name = azurerm_resource_group.main.name
-  parent_id           = azurerm_user_assigned_identity.app.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = azurerm_kubernetes_cluster.main.oidc_issuer_url
-  subject             = "system:serviceaccount:azulab:azulab"
+  name      = "aks-azulab"
+  parent_id = azurerm_user_assigned_identity.app.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = azurerm_kubernetes_cluster.main.oidc_issuer_url
+  subject   = "system:serviceaccount:azulab:azulab"
 }
