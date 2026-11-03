@@ -36,6 +36,7 @@ function createState(cfg) {
     // Readiness is a *runtime* signal: the pod can be alive but unable to serve
     // traffic (dependency down, or an operator forcing it out of rotation).
     failReadiness: false,
+    failReadinessUntil: 0,
     storageOk: null,
     storageCheckedAt: 0,
     storageFailures: 0,
@@ -78,6 +79,19 @@ async function checkStorage(cfg) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Time-bounded readiness override. A permanent switch would leave a replica
+// out of rotation forever (and unreachable through the Service, so you could
+// not even turn it back off remotely).
+function readinessForced(state) {
+  if (!state.failReadiness) return false;
+  if (state.failReadinessUntil && Date.now() >= state.failReadinessUntil) {
+    state.failReadiness = false;
+    state.failReadinessUntil = 0;
+    return false;
+  }
+  return true;
 }
 
 async function loadSecret(cfg, logger, state) {
@@ -179,10 +193,14 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     if (state.shuttingDown) {
       return res.status(503).json({ status: "shutting_down" });
     }
-    if (state.failReadiness) {
+    if (readinessForced(state)) {
       // Deliberate failure used to demonstrate that Kubernetes removes a pod
       // from Service endpoints instead of sending users to an error page.
-      return res.status(503).json({ status: "not_ready", checks: { debug: "forced_failure" } });
+      return res.status(503).json({
+        status: "not_ready",
+        checks: { debug: "forced_failure" },
+        autoResetInSeconds: Math.max(0, Math.ceil((state.failReadinessUntil - Date.now()) / 1000)),
+      });
     }
 
     const now = Date.now();
@@ -214,8 +232,13 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     }
     const raw = req.query.value !== undefined ? req.query.value : req.body && req.body.value;
     state.failReadiness = raw === undefined ? !state.failReadiness : String(raw) === "true";
-    logger.warn({ failReadiness: state.failReadiness }, "readiness override changed");
-    res.status(200).json({ failReadiness: state.failReadiness });
+    const ttl = Math.min(Math.max(Number(req.query.ttl) || 60, 5), 600);
+    state.failReadinessUntil = state.failReadiness ? Date.now() + ttl * 1000 : 0;
+    logger.warn({ failReadiness: state.failReadiness, ttlSeconds: state.failReadiness ? ttl : 0 }, "readiness override changed");
+    res.status(200).json({
+      failReadiness: state.failReadiness,
+      autoResetInSeconds: state.failReadiness ? ttl : 0,
+    });
   });
 
   app.get("/api/message", async (_req, res) => {

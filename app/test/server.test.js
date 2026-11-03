@@ -105,6 +105,7 @@ test("forced readiness failure returns 503 while health stays 200", async () => 
   const on = await request(app, "POST", "/debug/fail-readiness?value=true");
   assert.equal(on.status, 200);
   assert.equal(on.body.failReadiness, true);
+  assert.equal(on.body.autoResetInSeconds, 60, "override is time-bounded by default");
 
   const ready = await request(app, "GET", "/ready");
   assert.equal(ready.status, 503, "readiness must fail");
@@ -116,4 +117,16 @@ test("forced readiness failure returns 503 while health stays 200", async () => 
   await request(app, "POST", "/debug/fail-readiness?value=false");
   const recovered = await request(app, "GET", "/ready");
   assert.equal(recovered.status, 200);
+});
+
+test("expired readiness override no longer fails the probe", async () => {
+  const { createState, buildApp: build } = require("../src/server.js");
+  const { createLogger } = require("../src/logger");
+  const cfg = { ...require("../src/config").getConfig(), enableDebugEndpoints: true };
+  const state = createState(cfg);
+  state.failReadiness = true;
+  state.failReadinessUntil = Date.now() - 1000;
+  const app = build(cfg, createLogger("error"), state);
+  const r = await request(app, "GET", "/ready");
+  assert.equal(r.status, 200);
 });
