@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: azulab
+  namespace: azulab
+  labels:
+    app.kubernetes.io/name: azulab
+  annotations:
+    # Azure LoadBalancer defaults to a TCP probe. An HTTP probe on /health is
+    # cheaper to diagnose and matches what the app exposes.
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: azulab
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

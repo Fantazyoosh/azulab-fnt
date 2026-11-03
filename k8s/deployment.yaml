@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: azulab
+  namespace: azulab
+  labels:
+    app.kubernetes.io/name: azulab
+    app.kubernetes.io/part-of: azulab
+spec:
+  replicas: 2
+
+  # Zero-downtime rollout: create the new pod first (maxSurge 1) and never take
+  # an old one down while the new one is not Ready (maxUnavailable 0). With
+  # readinessProbe on /ready, traffic only reaches a pod that can actually
+  # answer, including its Key Vault and Storage dependencies.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  minReadySeconds: 5
+  progressDeadlineSeconds: 300
+  revisionHistoryLimit: 5
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: azulab
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: azulab
+        app.kubernetes.io/part-of: azulab
+        # Tells the Workload Identity webhook to project a federated token into
+        # the pod and inject AZURE_CLIENT_ID / AZURE_TENANT_ID /
+        # AZURE_FEDERATED_TOKEN_FILE / AZURE_AUTHORITY_HOST.
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: azulab
+
+      # Spread the two replicas if a second node ever appears. ScheduleAnyway
+      # is deliberate: DoNotSchedule would leave the second replica Pending on
+      # a single-node cluster, which is worse than co-locating them.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: azulab
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Give the load balancer and kube-proxy time to stop sending new requests
+      # before SIGTERM reaches the process. The app itself also handles SIGTERM
+      # with a graceful server.close().
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: azulab
+          image: ghcr.io/fantazyoosh/azulab-fnt:7af4a152857c96dfc57604ed6cf983989969bf6f
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          env:
+            - name: PORT
+              value: "8080"
+            - name: APP_VERSION
+              value: 7af4a152857c96dfc57604ed6cf983989969bf6f
+            - name: KEY_VAULT_URL
+              value: "https://kv-azulab-dev-6mvarl.vault.azure.net/"
+            - name: SECRET_NAME
+              value: "app-message"
+            - name: STORAGE_ACCOUNT_URL
+              value: "https://stazulabdev6mvarl.blob.core.windows.net"
+            - name: CONTAINER_NAME
+              value: "demo"
+            # Fail fast: only try Workload Identity, never IMDS or CLI probing.
+            - name: AZURE_TOKEN_CREDENTIALS
+              value: "WorkloadIdentityCredential"
+            # Lab-only switch that powers the readiness demo. Remove it in prod.
+            - name: ENABLE_DEBUG_ENDPOINTS
+              value: "true"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          # Startup: a slow first secret fetch must not trigger a restart loop.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
+
+          # Readiness: dependency-aware. Failing this removes the pod from the
+          # Service endpoints without restarting it.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Liveness: process-level only. It must NOT depend on Key Vault or
+          # Storage, otherwise a dependency outage would restart every pod and
+          # turn a degradation into a full outage.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 384Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
