@@ -12,7 +12,18 @@ At its core, Azulab is a simple "Broadcast Message" app. However, the *real* pro
 Imagine you are building a system for a bank or a large e-commerce site. You cannot just "upload files via FTP". You need security, audit logs, and the ability to revert a mistake in seconds. **That is exactly what Azulab demonstrates.**
 
 ### 🗺️ The Big Picture (Data Flow)
-`User` $\rightarrow$ `GitHub PR` $\rightarrow$ `CI/CD Pipeline (OIDC)` $\rightarrow$ `Azure Container Apps` $\rightarrow$ `Managed Identity` $\rightarrow$ `Key Vault / Blob Storage`
+`User` $\rightarrow$ `GitHub PR` $\rightarrow$ `CI/CD Pipeline (OIDC)` $\rightarrow$ `GHCR image` $\rightarrow$ `Azure Container Apps` **or** `AKS` $\rightarrow$ `Managed Identity` $\rightarrow$ `Key Vault / Blob Storage`
+
+The same image runs on two runtimes:
+
+| Runtime | Role |
+| :--- | :--- |
+| **Azure Container Apps** | serverless, scale-to-zero, cheapest public demo |
+| **Azure Kubernetes Service** | orchestrated containers — the part worth learning |
+
+Both use the same managed identity, so the application never knows where it runs.
+See **[`docs/aks.md`](docs/aks.md)** for the cluster design and
+**[`docs/demo-script.md`](docs/demo-script.md)** for the walkthrough.
 
 ---
 
@@ -23,7 +34,9 @@ Imagine you are building a system for a bank or a large e-commerce site. You can
 | **Terraform** | Infrastructure as Code | To avoid "clicking in the portal". Infrastructure is versioned and reproducible. |
 | **OIDC** | Trust Federation | No more stored passwords/secrets in GitHub. Azure trusts GitHub's identity. |
 | **Managed Identity** | Zero-Trust Auth | The app doesn't "log in" with a password; it *is* the identity. No secrets to leak. |
+| **Workload Identity** | Pod-level Azure auth | Kubernetes projects a short-lived token; there is no Secret object in the cluster. |
 | **Azure Container Apps** | Serverless Compute | Scale-to-zero saves money; Revision Management allows instant rollbacks. |
+| **Azure Kubernetes Service** | Orchestrated Compute | Probes, rolling updates, PDB and Service endpoints — the real Kubernetes surface. |
 | **Key Vault** | Secret Management | Secrets are encrypted and audited, not stored in `.env` files. |
 | **Blob Storage** | Dynamic State | Allows updating the app's message without rebuilding or restarting the container. |
 
@@ -41,6 +54,10 @@ If you are new to DevOps, follow this order to understand the project:
    $\rightarrow$ *The most important part for interviews. Learn how to justify technical decisions.*
 4. **[The Incident Log (`docs/rollback-log.md`)](docs/rollback-log.md)** 
    $\rightarrow$ *See how real-world failures are handled and recovered.*
+5. **[The AKS Runtime (`docs/aks.md`)](docs/aks.md)** 
+   $\rightarrow$ *Cluster design, Workload Identity, probes and cost.*
+6. **[The Demo Script (`docs/demo-script.md`)](docs/demo-script.md)** 
+   $\rightarrow$ *Twelve minutes, ten commands, zero improvisation.*
 
 ---
 

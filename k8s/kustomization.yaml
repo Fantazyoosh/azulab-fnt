@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: azulab
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+
+# Single source of truth for the image. The deploy step only edits this block,
+# never the Deployment itself, so the running tag is always reviewable in Git.
+images:
+  - name: ghcr.io/fantazyoosh/azulab-fnt
+    newTag: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
