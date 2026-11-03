@@ -1,8 +1,8 @@
 # Rollback
 
-The CD pipeline deploys an **immutable image tag** (full commit SHA) as a new
-Container Apps revision and keeps previous revisions. Rollback does not rebuild
-anything — it reactivates a previous revision or redeploys a previous tag.
+The CD pipeline deploys an **immutable image tag** (full commit SHA). Rollback
+does not rebuild anything — it moves a pointer to a previous revision (Container
+Apps) or a previous ReplicaSet (AKS), or redeploys a previous tag.
 
 ## Option A — activate a prior revision (fastest)
 
@@ -26,6 +26,17 @@ az containerapp update \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --image "ghcr.io/<owner>/<repo>:<previous-sha>"
 ```
+
+## Option C — AKS (Kubernetes)
+
+```sh
+kubectl -n azulab rollout history deploy/azulab
+kubectl -n azulab rollout undo deploy/azulab
+kubectl -n azulab rollout status deploy/azulab --timeout=240s
+```
+
+A ReplicaSet is an immutable snapshot of the pod template, so `undo` is a pointer
+move. There is no rebuild, and the previous image is already on the node.
 
 ## Verify
 
