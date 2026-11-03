@@ -127,6 +127,10 @@ Measured with the Azure Retail Prices API for `swedencentral` (Linux):
 | Control plane (Free tier) | 0 | 0 |
 | **Total** | | **~2.93** |
 
+A subscription budget (`budget-azulab-dev`, 50 per month in the billing currency)
+notifies at 80% of actual spend and 100% of the forecast. It is created only when
+`budget_alert_email` is set.
+
 Stop the cluster when it is not needed:
 
 ```bash
