@@ -34,7 +34,8 @@ it without looking.
 
 ### `/health` vs `/ready`
 - `/health`: is the process alive? (liveness probe)
-- `/ready`: can it serve? checks Key Vault status + storage config (readiness probe)
+- `/ready`: can it serve? checks the Key Vault secret and Blob Storage reachability,
+  with a 2 s timeout, a 10 s cache and a two-consecutive-failures rule (readiness probe)
 - Why both: Kubernetes/Container Apps replace pods/replicas only when *ready* is
   down; *health* down kills and restarts. Mixing them causes flapping.
 
@@ -55,10 +56,13 @@ it without looking.
   with `docker kill` (SIGKILL) and explain the difference — this is IX in
   the 12 factors.
 
-## 5. `infra/main.tf`
+## 5. `infra/main.tf` and `infra/aks.tf`
 - `liveness_probe` on `/health`, `readiness_probe` on `/ready`.
 - `min_replicas = 0`, `max_replicas = 2`.
+- `aks.tf`: Free tier control plane, one node, OIDC issuer + workload identity,
+  and the federated credential whose subject is the Kubernetes ServiceAccount.
 - Task: set `min_replicas = 1`, apply, note the cost difference the next morning.
+- Task: read `docs/aks.md` and explain why the cluster is in `swedencentral`.
 
 ## Weekend self-tasks (do these yourself)
 - [ ] Re-implement graceful shutdown from memory.
