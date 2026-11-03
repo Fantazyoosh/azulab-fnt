@@ -66,6 +66,10 @@ If you are new to DevOps, follow this order to understand the project:
    $\rightarrow$ *Twelve trade-offs, each with its cost written down.*
 10. **[The Drill (`docs/drill-rbac-kv.md`)](docs/drill-rbac-kv.md)** 
     $\rightarrow$ *RBAC, security and Key Vault — answer out loud, then check.*
+11. **[Deep dive: Key Vault + Blob (`docs/deep-dive-keyvault-blob.md`)](docs/deep-dive-keyvault-blob.md)** 
+    $\rightarrow$ *The two components, layer by layer, with labs and audit proofs.*
+12. **[References (`docs/references.md`)](docs/references.md)** 
+    $\rightarrow$ *The official Microsoft Learn reading list for RBAC, Key Vault, Blob and WAF.*
 
 ---
 

@@ -117,7 +117,9 @@ is one resource group.
   Contributor` (read/write blobs). Nothing else.
 
 ### Storage hardening
-- `shared_access_key_enabled = false` — there is no account key to leak.
+- `shared_access_key_enabled = false` — key-based authentication is disabled; a key
+  can still be listed through ARM, but using it returns
+  `KeyBasedAuthenticationNotPermitted`.
 - Because of that, the **Terraform provider** must use Entra ID for storage
   operations: `storage_use_azuread = true` in `provider.tf`. Without it, every
   plan fails with `KeyBasedAuthenticationNotPermitted`.

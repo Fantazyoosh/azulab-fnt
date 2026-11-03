@@ -107,7 +107,7 @@ expires quickly. There is no long-lived credential to steal.
 | Container image | no credentials baked in |
 | Kubernetes API | no Secret objects |
 | Pod filesystem | a projected token file, valid briefly, audience-bound |
-| Storage account | shared key disabled — no key to steal |
+| Storage account | shared key authentication disabled — a stolen key cannot authenticate |
 | Key Vault | needs an Entra token with `Key Vault Secrets User` |
 
 The weakest point is the human with `Owner`, which is why the pipeline identity

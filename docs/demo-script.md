@@ -72,6 +72,28 @@ Show `infra/aks.tf` → the federated credential subject:
 
 ---
 
+## 3b. "Prove it with the audit log" (optional, 1 min)
+
+```bash
+WS=$(az monitor log-analytics workspace show -g rg-azulab-dev-polandcentral \
+  -n law-azulab-dev --query customerId -o tsv)
+az monitor log-analytics query -w "$WS" --analytics-query \
+"AzureDiagnostics
+ | where ResourceType == 'VAULTS'
+ | where OperationName in ('SecretGet','SecretList')
+ | project TimeGenerated, OperationName, ResultType, CallerIPAddress, identity_claim_oid_g
+ | order by TimeGenerated desc
+ | take 10" -o table
+```
+
+Say:
+
+> This is the Key Vault audit trail. The OID is the managed identity's principal
+> id, the IP is the AKS or Container Apps egress, and the result is Success.
+> That is how I answer "who read the secret?" without guessing.
+
+---
+
 ## 4. "Readiness is real" (2 min)
 
 ```bash

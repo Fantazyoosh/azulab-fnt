@@ -58,10 +58,12 @@ No principal has subscription-wide access any more.
 
 | Control | Value | Reason |
 | --- | --- | --- |
-| `shared_access_key_enabled` | **false** | no account master key exists to leak |
+| `shared_access_key_enabled` | **false** | no account master key can authenticate |
 | `allow_nested_items_to_be_public` | false | blobs cannot be made anonymous |
 | `min_tls_version` | TLS1_2 | rejects old clients |
 | `https_traffic_only_enabled` | true | no plaintext transport |
+| `blob_properties.versioning_enabled` | true | every overwrite is kept as a version |
+| `delete_retention_policy` | 7 days | a deleted blob or container is recoverable |
 | `network_rules` | optional IP allow-list | additive, off by default |
 
 Consequence for operators: the Terraform provider authenticates with Entra ID
@@ -115,7 +117,7 @@ This is what makes "who deleted the secret?" or "who wrote that blob?" answerabl
 | Credential leak | secret in GitHub Secrets | OIDC federation | nothing to leak |
 | Identity theft | username/password | managed identity / workload identity | no password to steal |
 | Over-privilege | subscription Contributor | Contributor on one resource group | bounded blast radius |
-| Storage key leak | account key in config | shared key disabled | no key exists |
+| Storage key leak | account key in config | shared key authentication disabled | a stolen key cannot authenticate |
 | Secret destruction | soft delete only | purge protection | irreversible deletion blocked |
 | Blind spots | no audit trail | diagnostic settings to Log Analytics | access is auditable |
 | Compromised pod | node-wide identity | per-pod federated identity | pod can only read its own role scope |
@@ -165,7 +167,7 @@ kubectl -n azulab exec deploy/azulab -- env | grep AZURE_
 | Over-privileged pipeline | leaked workflow token creates resources everywhere | OIDC app is Contributor on **one resource group**, cannot assign roles | it can still deploy a malicious image into that RG |
 | Public blob access | anonymous download of customer data | `allow_nested_items_to_be_public = false`, shared key disabled, container private | the endpoint is public; access requires an identity with a role |
 | Pod compromise | attacker runs code inside the pod | token is audience-bound and short-lived; no Kubernetes API permissions; data-plane roles only | the token works from inside the pod until it expires |
-| Storage key leak | account key copied from config | shared key authentication is disabled — no key exists | none for this path |
+| Storage key leak | account key copied from config | shared key authentication is disabled: the key still exists in ARM, but every data-plane use returns `KeyBasedAuthenticationNotPermitted` | none for this path |
 | Secret destruction | tired operator deletes the vault | soft delete 7 days + purge protection | `Key Vault Administrator` can still disable the secret |
 | Deleted identity | app cannot authenticate | federated credential is declarative, reviewed in Git | renaming the namespace/SA breaks auth by design |
 | Network interception | traffic to Storage/KV | TLS 1.2 minimum, HTTPS only | traffic is public; a private endpoint is the next step |
