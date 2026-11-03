@@ -5,8 +5,10 @@ app/.npm/
 # Terraform
 infra/.terraform/
 infra/.terraform.lock.hcl
-infra/terraform.tfstate
-infra/terraform.tfstate.backup
+infra/*.tfstate
+infra/*.tfstate.*
+infra/tfplan
+infra/*.tfplan
 infra/*.tfvars
 !infra/terraform.tfvars.example
 

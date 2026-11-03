@@ -80,3 +80,40 @@ test("blob upload enforces size limit", async () => {
   const r = await request(app, "POST", "/api/blobs", { name: "big.txt", content: "too large" });
   assert.equal(r.status, 413);
 });
+
+test("version exposes runtime identity and every response carries x-pod-name", async () => {
+  const app = buildApp();
+  const r = await request(app, "GET", "/version");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.service, "azulab");
+  assert.ok(typeof r.body.pod === "string" && r.body.pod.length > 0);
+  assert.ok(typeof r.body.node === "string");
+  assert.ok(r.body.startedAt, "start timestamp present");
+  assert.ok(r.headers["x-pod-name"], "pod name header present");
+});
+
+test("debug readiness switch is disabled by default", async () => {
+  const app = buildApp();
+  const r = await request(app, "POST", "/debug/fail-readiness");
+  assert.equal(r.status, 404);
+});
+
+test("forced readiness failure returns 503 while health stays 200", async () => {
+  const cfg = { ...require("../src/config").getConfig(), enableDebugEndpoints: true };
+  const app = buildApp(cfg);
+
+  const on = await request(app, "POST", "/debug/fail-readiness?value=true");
+  assert.equal(on.status, 200);
+  assert.equal(on.body.failReadiness, true);
+
+  const ready = await request(app, "GET", "/ready");
+  assert.equal(ready.status, 503, "readiness must fail");
+  assert.equal(ready.body.checks.debug, "forced_failure");
+
+  const health = await request(app, "GET", "/health");
+  assert.equal(health.status, 200, "liveness must not fail, or the pod would restart");
+
+  await request(app, "POST", "/debug/fail-readiness?value=false");
+  const recovered = await request(app, "GET", "/ready");
+  assert.equal(recovered.status, 200);
+});
