@@ -90,6 +90,13 @@ npm start
 ```
 Visit `http://localhost:8080` to see the UI.
 
+The dashboard uses Tailwind CSS compiled to a single `public/styles.css` (no runtime
+CDN). After changing classes, rebuild it:
+
+```bash
+npm run build:css
+```
+
 ### ☁️ Cloud Deploy (The "DevOps" Experience)
 1. Create a branch $\rightarrow$ `git checkout -b feat/my-feature`
 2. Push changes $\rightarrow$ `git push origin feat/my-feature`

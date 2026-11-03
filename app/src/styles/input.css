@@ -1,0 +1,128 @@
+@import "tailwindcss";
+@source "../../public";
+
+@theme {
+  --color-ink: #070b14;
+  --color-panel: #0d1526;
+  --color-line: #1e2a44;
+  --color-paper: #d6deeb;
+  --color-muted: #7c8aa5;
+  --color-accent: #38bdf8;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-ink font-sans text-paper antialiased;
+    background-image: radial-gradient(1100px 520px at 50% -10%, #0e1b36 0%, #070b14 60%);
+    background-repeat: no-repeat;
+  }
+
+  ::selection {
+    background: #1d4ed8;
+    color: #fff;
+  }
+
+  a {
+    @apply text-accent underline-offset-4 hover:underline;
+  }
+}
+
+@layer components {
+  .shell {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  .card {
+    @apply rounded-lg border border-line bg-panel p-5;
+  }
+
+  .label {
+    @apply font-mono text-[10px] uppercase tracking-[0.22em] text-muted;
+  }
+
+  .value {
+    @apply mt-2 text-2xl font-light tracking-tight text-paper;
+  }
+
+  .subtle {
+    @apply text-sm leading-relaxed text-muted;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted;
+  }
+
+  .dot {
+    @apply h-1.5 w-1.5 rounded-full bg-muted;
+  }
+
+  .dot-ok {
+    @apply bg-ok;
+  }
+
+  .dot-warn {
+    @apply bg-warn;
+  }
+
+  .dot-bad {
+    @apply bg-bad;
+  }
+
+  .tab {
+    @apply border-b-2 border-transparent px-1 py-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted transition-colors hover:text-paper;
+  }
+
+  .tab[aria-selected="true"] {
+    @apply border-accent text-paper;
+  }
+
+  .proof {
+    @apply mt-3 block overflow-x-auto rounded border border-line bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-muted;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted transition-colors hover:border-accent hover:text-paper;
+  }
+
+  .btn-primary {
+    @apply border-accent/60 bg-accent/10 text-accent hover:bg-accent/20 hover:text-paper;
+  }
+
+  .input {
+    @apply w-full rounded border border-line bg-black/30 px-3 py-2 text-sm text-paper placeholder:text-muted/70 focus:border-accent focus:outline-none;
+  }
+
+  .stat {
+    @apply flex items-baseline justify-between gap-3 border-b border-line py-2 last:border-0;
+  }
+
+  .stat-label {
+    @apply font-mono text-[10px] uppercase tracking-[0.18em] text-muted;
+  }
+
+  .stat-value {
+    @apply font-mono text-sm text-paper;
+  }
+
+  .bar {
+    @apply h-2 rounded-sm bg-accent/70;
+  }
+
+  .divider {
+    @apply my-8 border-t border-line;
+  }
+
+  .kbd {
+    @apply rounded border border-line bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-muted;
+  }
+}
