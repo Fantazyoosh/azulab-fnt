@@ -17,8 +17,10 @@ them. Every command here has been executed against the live lab.
 ### Step 2 — Continuous Deployment
 - The pipeline authenticates to Azure with **OIDC** — no client secret exists.
 - Container Apps: `az containerapp update --image <sha>` creates a new revision.
-- AKS: deployment is currently **manual** (`kubectl set image` / `kubectl apply`).
-  This is a known gap; the target state is GitOps (Argo CD / Flux).
+- AKS: the same CD workflow runs `kubectl set image` and waits for the rollout
+  (`maxUnavailable: 0`). The manifests in `k8s/` are the baseline; CD injects the
+  tag built by the run. A GitOps controller (Argo CD) is the next step for
+  reconciling Git and the cluster without a pipeline step.
 
 ### Step 3 — Verification
 - Container Apps: the CD workflow polls `/health` for up to 150 seconds.

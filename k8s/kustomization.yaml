@@ -10,8 +10,9 @@ resources:
   - service.yaml
   - pdb.yaml
 
-# Single source of truth for the image. The deploy step only edits this block,
-# never the Deployment itself, so the running tag is always reviewable in Git.
+# Baseline image tag. CD injects the immutable tag produced by the pipeline on
+# every merge (`kubectl set image`); this value is what a manual
+# `kubectl apply -k` uses. Keep it at the last commit that changed the app.
 images:
   - name: ghcr.io/fantazyoosh/azulab-fnt
     newTag: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
