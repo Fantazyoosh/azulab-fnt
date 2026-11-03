@@ -190,3 +190,33 @@ secret set`.
 - Bootstrap is a documented manual step; a fresh environment needs it before the
   app becomes ready.
 - Terraform no longer rotates or deletes the secret.
+
+---
+
+## ADR-013 — RBAC assignments are held by Entra ID groups
+
+**Context.** Roles were assigned directly to the human and to the pipeline service
+principal. Onboarding a second engineer meant repeating the assignment on every
+resource; offboarding meant finding all of them. The tenant has no Entra ID P1/P2,
+so PIM (time-bound elevation) is not available.
+
+**Decision.** Three security groups hold the assignments:
+
+- `azulab-deployers` → `Contributor` on the resource group (the pipeline SP is a
+  member; it has no direct roles)
+- `azulab-platform-admins` → `Key Vault Administrator` on the vault
+- `azulab-readers` → `Reader` on the resource group (empty onboarding path)
+
+Runtime identities keep direct, narrow assignments: they are created by
+Terraform, have one scope, and must not depend on group propagation during a
+deploy.
+
+**Consequences.**
+- Membership is the unit of change; offboarding is one `member remove`.
+- Group-based RBAC can take up to 10 minutes to replicate. The first role
+  assignment failed with `PrincipalNotFound`; `scripts/setup-entra-groups.sh`
+  now retries.
+- Without PIM there is no time-bound elevation. Compensating controls: narrow
+  scopes, one human `Owner`, no data-plane roles for automation.
+- Debugging "why can this principal do X" now starts with group membership, not
+  with direct role assignments.

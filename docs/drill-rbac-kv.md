@@ -41,6 +41,13 @@ musi to mieć; pipeline, który tylko wdraża — nie.
 6. Czy nazwa sekretu i tenant są poprawne?
 7. Co mówią logi diagnostyczne — jaki principal dostał `Forbidden`?
 
+**A7. Dlaczego role nadajesz grupom, a nie użytkownikom?**
+Jednostką zmiany jest członkostwo. Pipeline nie ma bezpośrednich assignmentów —
+dziedziczy Contributor z `azulab-deployers`. Człowiek nie ma bezpośredniej roli
+na sejfie — dziedziczy z `azulab-platform-admins`. Offboarding to jedno
+`member remove`. Tenant nie ma P1/P2, więc zamiast PIM mamy wąskie scope i jeden
+break-glass `Owner`.
+
 **Dowód w repo:** `docs/rbac-matrix.md`, `infra/main.tf` (role assignments).
 
 ---

@@ -136,6 +136,37 @@ Only non-sensitive configuration (`KEY_VAULT_URL`, `STORAGE_ACCOUNT_URL`,
 
 ---
 
+## 4a. Entra ID groups (onboarding / offboarding)
+
+Azure RBAC assignments are held by security groups, not by people or by the
+pipeline.
+
+| Group | Role | Scope |
+| --- | --- | --- |
+| `azulab-deployers` | `Contributor` | resource group |
+| `azulab-platform-admins` | `Key Vault Administrator` | the vault |
+| `azulab-readers` | `Reader` | resource group |
+
+Create or repair them with `./scripts/setup-entra-groups.sh` (idempotent, retries
+the Entra replication delay).
+
+```bash
+# onboard a reader
+az ad group member add --group azulab-readers --member-id <object-id>
+
+# offboard an admin
+az ad group member remove --group azulab-platform-admins --member-id <object-id>
+```
+
+Group-based RBAC can take up to 10 minutes to propagate. The pipeline service
+principal intentionally has **zero** direct role assignments — if
+`az role assignment list --assignee <sp>` is empty, that is correct.
+
+This tenant has Entra ID Free: no PIM, no Conditional Access. Never grant
+permanent `Owner` to automation.
+
+---
+
 ## 5. Incident Response & Rollback
 
 ### Container Apps
