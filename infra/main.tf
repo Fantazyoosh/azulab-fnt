@@ -132,11 +132,17 @@ resource "azurerm_storage_container" "demo" {
   container_access_type = "private"
 }
 
-# Grant the deploying principal Key Vault Administrator so it can create the secret.
-resource "azurerm_role_assignment" "kv_admin" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Administrator"
-  principal_id         = data.azurerm_client_config.current.object_id
+# The deploying principal used to receive Key Vault Administrator directly here.
+# Human admin access is now held by the azulab-platform-admins group
+# (scripts/setup-entra-groups.sh), so Terraform must stop managing this
+# assignment. destroy = false is correct: the direct assignment was removed
+# during the group cutover.
+removed {
+  from = azurerm_role_assignment.kv_admin
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "azurerm_role_assignment" "app_kv_secrets_user" {
