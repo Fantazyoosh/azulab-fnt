@@ -15,6 +15,12 @@ permissions:
   id-token: write
   contents: read
 
+# Serialise deploys: two merges in quick succession must not race for the same
+# Container App revision.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -56,13 +62,21 @@ jobs:
           set -euo pipefail
           URL="https://${{ vars.AZURE_CONTAINER_APP_FQDN }}"
           for i in $(seq 1 30); do
-            if curl -fsS "$URL/health" >/tmp/health.json; then
-              cat /tmp/health.json
+            if curl -fsS "$URL/health" >/tmp/health.json \
+              && curl -fsS "$URL/ready" >/tmp/ready.json \
+              && curl -fsS "$URL/api/message" >/tmp/message.json; then
+              cat /tmp/health.json; echo
+              cat /tmp/ready.json; echo
+              cat /tmp/message.json; echo
+              jq -e '.status == "ready"' /tmp/ready.json >/dev/null
+              jq -e '.message | length > 0' /tmp/message.json >/dev/null
+              jq -e '.source == "blob" or .source == "vault"' /tmp/message.json >/dev/null
               exit 0
             fi
             sleep 5
           done
-          echo "smoke test failed"; exit 1
+          echo "smoke test failed: /health, /ready or /api/message did not return 200"
+          exit 1
 
       - name: Print previous revisions
         if: always()

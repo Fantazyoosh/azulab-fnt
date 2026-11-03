@@ -8,6 +8,7 @@ role name: `Contributor` on a resource group is a very different risk from
 | --- | --- | --- | --- | --- | --- |
 | `maciej.waszkiewicz@me.com` | user | `Owner` | subscription | everything (lab owner) | — |
 | `maciej.waszkiewicz@me.com` | user | `Key Vault Administrator` | the vault | bootstrap and rotate secrets | manage other vaults |
+| `maciej.waszkiewicz@me.com` | user | `Storage Blob Data Contributor` | `stazulabtfstate6mvarl` (Terraform state) | read/write the state blob | read application blobs (different account) |
 | `azulab-github-oidc` | app registration | `Contributor` | resource group | deploy Container Apps | touch other resource groups, assign roles |
 | `id-azulab-dev-app` | user-assigned managed identity | `Key Vault Secrets User` | the vault | read secret values | write, delete, change permissions |
 | `id-azulab-dev-app` | user-assigned managed identity | `Storage Blob Data Contributor` | the storage account | read/write blobs | change network rules, delete the account |
