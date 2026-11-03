@@ -3,6 +3,12 @@ name: CI (main)
 on:
   push:
     branches: [main]
+    # A docs-only change does not need a new image or a deployment. Note that
+    # GitHub skips the workflow only when *every* changed file matches; a commit
+    # that touches code and docs still builds.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
 
 permissions:
   contents: read

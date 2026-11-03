@@ -96,9 +96,13 @@ A control you cannot audit is not a control. Diagnostic settings send:
 
 - Key Vault: all logs + all metrics → `law-azulab-dev`
 - Blob service: `StorageWrite` and `StorageDelete` → `law-azulab-dev`
+- AKS control plane: `kube-audit-admin` (mutating requests) and
+  `cluster-autoscaler` → `law-azulab-dev`
+- Container Apps: the environment forwards console logs to the same workspace
 
 `StorageRead` is intentionally excluded: every message read would be logged, which
-adds cost without adding signal in this lab.
+adds cost without adding signal in this lab. `kube-audit` (all reads) is excluded
+for the same reason — `kube-audit-admin` answers "who changed what".
 
 This is what makes "who deleted the secret?" or "who wrote that blob?" answerable.
 
@@ -150,3 +154,57 @@ kubectl -n azulab exec deploy/azulab -- env | grep AZURE_
 | No private endpoints | traffic over Microsoft backbone, public endpoints | private endpoint for KV and Storage |
 | No WAF / geo-blocking | no edge filtering | Front Door + WAF policy |
 | No image scanning | vulnerable base image could ship | Trivy in CI + Defender for Containers |
+
+---
+
+## 9. Threat model
+
+| Threat | Concrete scenario | Control in place | Residual risk |
+| --- | --- | --- | --- |
+| Secret leak from Git | someone clones the repo and reads a password | no secret values in Git; the value was removed from Terraform state; OIDC has no client secret | a human can still copy a secret by hand |
+| Over-privileged pipeline | leaked workflow token creates resources everywhere | OIDC app is Contributor on **one resource group**, cannot assign roles | it can still deploy a malicious image into that RG |
+| Public blob access | anonymous download of customer data | `allow_nested_items_to_be_public = false`, shared key disabled, container private | the endpoint is public; access requires an identity with a role |
+| Pod compromise | attacker runs code inside the pod | token is audience-bound and short-lived; no Kubernetes API permissions; data-plane roles only | the token works from inside the pod until it expires |
+| Storage key leak | account key copied from config | shared key authentication is disabled — no key exists | none for this path |
+| Secret destruction | tired operator deletes the vault | soft delete 7 days + purge protection | `Key Vault Administrator` can still disable the secret |
+| Deleted identity | app cannot authenticate | federated credential is declarative, reviewed in Git | renaming the namespace/SA breaks auth by design |
+| Network interception | traffic to Storage/KV | TLS 1.2 minimum, HTTPS only | traffic is public; a private endpoint is the next step |
+| IP allow-list failure | "deploy only from my IP" | **not attempted** — PaaS egress is dynamic | none, because the control is not used |
+
+The last row is the important one: an IP allow-list for a cloud-hosted app is a
+control that looks strict and fails in production. The app's egress IP is not
+stable unless the environment is VNet-injected with a NAT gateway.
+
+---
+
+## 10. Private endpoint design (designed, not implemented)
+
+Why not now: the AKS cluster uses `kubenet` and Container Apps is not
+VNet-injected, so neither can reach a private endpoint yet. Disabling public
+access today would break both runtimes.
+
+Target design:
+
+| Component | Value |
+| --- | --- |
+| VNet | `10.60.0.0/16` |
+| AKS subnet | `10.60.1.0/24` (Azure CNI Overlay) |
+| Private endpoints subnet | `10.60.2.0/24` |
+| Blob private endpoint | `privatelink.blob.core.windows.net` |
+| Vault private endpoint | `privatelink.vaultcore.azure.net` |
+| Public network access | disabled **after** the private path is verified |
+
+Migration order (each step reversible):
+
+1. Create the VNet, subnets and private DNS zones.
+2. Create the private endpoints; keep public access enabled.
+3. Recreate AKS with Azure CNI Overlay in the new subnet.
+4. VNet-inject the Container Apps environment (requires a new environment).
+5. Verify both runtimes resolve the private IPs (`nslookup`, `curl`).
+6. Set `public_network_access_enabled = false` on Storage and Key Vault.
+
+Cost: about 0.01 $/hour per private endpoint plus DNS queries — negligible
+compared with the node.
+
+This is the answer to "why not just allow my IP?": because the workload does not
+run on your IP, and its egress is not stable.

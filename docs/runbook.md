@@ -73,10 +73,19 @@ kubectl apply -k k8s/                     # recreate the Service after start
 3. `terraform apply` converges Azure to the code.
 
 ### State
-- The state file is **local** (`infra/terraform.tfstate`) and gitignored.
-- There is **no remote backend**. Only one operator (this workstation) can apply.
-  A team would use an Azure Storage backend with state locking.
-- Back up before every apply: `cp terraform.tfstate terraform.tfstate.bak-$(date +%F-%H%M)`.
+- State lives in Azure Storage: account `stazulabtfstate6mvarl`, container
+  `tfstate`, key `azulab.tfstate` (`infra/backend.tf`).
+- The storage account is **created outside Terraform** — it must exist before
+  `terraform init`, so it cannot be managed by the configuration that stores its
+  state there. Bootstrap commands are in the header of `backend.tf`.
+- Shared key auth is disabled; the backend uses Entra ID
+  (`use_azuread_auth = true`), so the operator needs `Storage Blob Data
+  Contributor` on that account.
+- State locking is provided by the blob lease: two concurrent `apply` runs
+  cannot corrupt the state.
+- Local backups are still taken before risky changes:
+  `cp terraform.tfstate terraform.tfstate.bak-$(date +%F-%H%M)` (the local file is
+  a cache; the source of truth is the blob).
 
 ### What Terraform does **not** own
 - The running Container App image. CD updates it, so the resource has
@@ -211,6 +220,14 @@ unreachable through the LoadBalancer.
 **Cause:** a bad string replacement was committed and merged.
 **Fix:** review the rendered output, not only the diff. The UI now shows runtime
 identity, so a broken page is immediately visible.
+
+### Trap 8 — Remote backend bootstrap
+**Symptom:** `terraform init` fails with `403` or `container not found`.
+**Cause:** the state storage account or container does not exist, or the operator
+lacks data-plane access (shared key auth is disabled on the state account).
+**Fix:** run the bootstrap commands in the header of `backend.tf`, grant
+`Storage Blob Data Contributor` on the state account, then
+`terraform init -migrate-state`.
 
 ---
 

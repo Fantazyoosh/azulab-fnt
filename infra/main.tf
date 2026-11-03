@@ -234,6 +234,25 @@ resource "azurerm_monitor_diagnostic_setting" "key_vault" {
   }
 }
 
+# AKS control-plane audit. kube-audit-admin records mutating requests only:
+# the useful signal (who created/deleted what) without the cost and noise of
+# logging every read. Workload logs already reach the same workspace through
+# the Container Apps environment; node-level Container Insights is a documented
+# next step, not a prerequisite for the audit trail.
+resource "azurerm_monitor_diagnostic_setting" "aks" {
+  name                       = "diag-${local.name_prefix}-aks"
+  target_resource_id         = azurerm_kubernetes_cluster.main.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category = "kube-audit-admin"
+  }
+
+  enabled_log {
+    category = "cluster-autoscaler"
+  }
+}
+
 # Storage diagnostics attach to the blob service, not to the account: account
 # level settings do not capture data-plane operations.
 # StorageRead is deliberately omitted — every message read would be logged and
