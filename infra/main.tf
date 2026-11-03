@@ -108,6 +108,21 @@ resource "azurerm_storage_account" "main" {
     }
   }
 
+  # Data protection. Versioning keeps every overwrite of current_message.txt;
+  # soft delete makes an accidental DELETE recoverable for 7 days.
+  blob_properties {
+    versioning_enabled  = true
+    change_feed_enabled = true
+
+    delete_retention_policy {
+      days = 7
+    }
+
+    container_delete_retention_policy {
+      days = 7
+    }
+  }
+
   tags = local.tags
 }
 

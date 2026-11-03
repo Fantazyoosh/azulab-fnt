@@ -3,6 +3,9 @@
 Karta do mówienia na głos, nie do czytania. Odpowiedz w 60 sekund, potem sprawdź.
 Jeśli utkniesz — wróć do wskazanego pliku, nie do całego dokumentu.
 
+> Materiał źródłowy: `docs/references.md` (oficjalne linki Microsoft Learn)
+> i `docs/deep-dive-keyvault-blob.md` (dwa komponenty, warstwa po warstwie).
+
 ---
 
 ## A. RBAC
