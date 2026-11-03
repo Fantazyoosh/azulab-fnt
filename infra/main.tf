@@ -291,3 +291,38 @@ resource "azurerm_monitor_diagnostic_setting" "storage_blob" {
     category = "StorageDelete"
   }
 }
+
+# --- Cost guardrail -------------------------------------------------------
+# A Free Trial subscription has a spending limit, but the limit *disables* the
+# subscription instead of warning you. The budget notification gives an early
+# signal: 80% of actual spend and 100% of the forecast.
+resource "azurerm_consumption_budget_subscription" "main" {
+  count = var.budget_alert_email == "" ? 0 : 1
+
+  name            = "budget-${local.name_prefix}"
+  subscription_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  amount          = var.budget_amount
+  time_grain      = "Monthly"
+
+  time_period {
+    # Azure requires the first day of a month. Kept as a literal because
+    # computing it from timestamp() would produce a diff on every plan.
+    start_date = "2026-11-01T00:00:00Z"
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 80
+    operator       = "GreaterThan"
+    threshold_type = "Actual"
+    contact_emails = [var.budget_alert_email]
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThan"
+    threshold_type = "Forecasted"
+    contact_emails = [var.budget_alert_email]
+  }
+}

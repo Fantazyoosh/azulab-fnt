@@ -194,7 +194,9 @@ Gdzie: `infra/main.tf`, `docs/aks.md`
 - Control plane AKS Free = 0.
 - Po demo: `kubectl delete svc azulab` i `az aks stop`.
 
-Alert budżetowy jest szablonem (`budget_alert_email`); pusty e-mail go wyłącza.
+Alert budżetowy jest **wdrożony**: 50 w walucie rozliczeniowej subskrypcji,
+powiadomienie przy 80% wydatku actual i 100% forecasted na `budget_alert_email`.
+Pusty e-mail wyłącza zasób (`count = 0`).
 
 ## 19. Jak sprawdzam, że pipeline nie utknął?
 

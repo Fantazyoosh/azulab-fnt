@@ -28,6 +28,12 @@ variable "budget_alert_email" {
   description = "Email for the subscription budget alert. Empty disables the budget resource."
 }
 
+variable "budget_amount" {
+  type        = number
+  default     = 50
+  description = "Monthly budget in the subscription billing currency. Used only when budget_alert_email is set."
+}
+
 variable "allowed_storage_ip_ranges" {
   type        = list(string)
   default     = []
