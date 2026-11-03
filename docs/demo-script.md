@@ -123,7 +123,7 @@ Expected: `200` only. No `502`, no `503`.
 ## 7. "Failure is contained" (2 min)
 
 ```bash
-curl -s -X POST "http://$IP/debug/fail-readiness?value=true"
+curl -s -X POST "http://$IP/debug/fail-readiness?value=true&ttl=30"
 kubectl -n azulab get endpoints azulab
 kubectl -n azulab get pods
 ```
@@ -134,12 +134,25 @@ Say:
 > see no error because the other replica is still serving. The container was
 > not restarted — this is readiness, not liveness.
 
+Watch it heal itself (the override is time-bounded, 30 seconds here):
+
 ```bash
-curl -s -X POST "http://$IP/debug/fail-readiness?value=false"
-kubectl -n azulab get endpoints azulab
+kubectl -n azulab get endpoints azulab -w
 ```
 
 Say:
+
+> A permanent switch would be a trap: once the pod leaves the Service, the load
+> balancer cannot reach it to switch the flag back off. The `ttl` makes the
+> experiment self-healing, like a bounded chaos run.
+
+If you want to target one specific pod instead of whichever replica the LB
+picks:
+
+```bash
+POD=$(kubectl -n azulab get pods -o jsonpath='{.items[0].metadata.name}')
+kubectl -n azulab exec $POD -- wget -qO- --post-data='' "localhost:8080/debug/fail-readiness?value=true&ttl=30"
+```
 
 > This endpoint exists only because `ENABLE_DEBUG_ENDPOINTS=true` in this lab.
 > In production it is off by default — a public switch that drains replicas is

@@ -14,4 +14,4 @@ resources:
 # never the Deployment itself, so the running tag is always reviewable in Git.
 images:
   - name: ghcr.io/fantazyoosh/azulab-fnt
-    newTag: 7af4a152857c96dfc57604ed6cf983989969bf6f
+    newTag: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
