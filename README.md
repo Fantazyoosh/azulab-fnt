@@ -58,6 +58,12 @@ If you are new to DevOps, follow this order to understand the project:
    $\rightarrow$ *Cluster design, Workload Identity, probes and cost.*
 6. **[The Demo Script (`docs/demo-script.md`)](docs/demo-script.md)** 
    $\rightarrow$ *Twelve minutes, ten commands, zero improvisation.*
+7. **[The RBAC Matrix (`docs/rbac-matrix.md`)](docs/rbac-matrix.md)** 
+   $\rightarrow$ *Who can do what, on which scope, and why the blast radius is small.*
+8. **[The Secret Lifecycle (`docs/secret-lifecycle.md`)](docs/secret-lifecycle.md)** 
+   $\rightarrow$ *Where the secret lives, how it is read, and what an attacker would find.*
+9. **[Architecture Decisions (`docs/decisions.md`)](docs/decisions.md)** 
+   $\rightarrow$ *Twelve trade-offs, each with its cost written down.*
 
 ---
 
