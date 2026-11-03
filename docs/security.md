@@ -1,78 +1,152 @@
-# 🛡️ Security Architecture: Zero-Trust Model
+# 🛡️ Security Architecture
 
-This document explains the security choices made in Azulab. The goal was to achieve a **Zero-Trust Architecture**, meaning we never trust a secret based on where it is stored, but rather based on the **Identity** of the requester.
-
----
-
-## 📦 Data Model & Entities
-
-Before diving into security, it's important to understand the data model. In Azulab, we distinguish between **Infrastructure Resources** (the "where") and **Application Entities** (the "what").
-
-### 1. Application Entities
-An **Entity** is a conceptual object that represents a real-world piece of data.
-- **Message Entity**: The core object of this app. It consists of:
-    - `content`: The actual text of the broadcast.
-    - `source`: Where the data came from (`blob` or `vault`).
-    - `timestamp`: When it was last updated.
-- **Configuration Entity**: A internal object managing the cloud settings (URLs, Client IDs).
-
-### 2. Infrastructure Resources
-Unlike entities, these are the cloud components that host the app:
-- **Azure Container App**: The compute resource (the "home" for the code).
-- **Key Vault**: The security resource for secrets.
-- **Blob Storage**: The storage resource for dynamic state.
+Zero-Trust in this project means: no component is trusted because of *where* it
+runs. Every access is an identity presenting a short-lived token to a resource
+that checks a role assignment. There is no password anywhere in the chain.
 
 ---
 
-## 🔑 The Core Philosophy: No More Secrets
+## 1. Trust chain
 
-In traditional apps, you often see `.env` files with passwords. In Enterprise DevOps, this is a critical vulnerability. Azulab solves this using three pillars:
+### GitHub Actions → Azure (OIDC)
+- App registration `azulab-github-oidc`, no client secret.
+- Three federated credentials restrict the trust to this repository:
+  - `refs/heads/main`
+  - the `production` environment
+  - a repository-scoped subject
+- **Role: `Contributor` on `rg-azulab-dev-polandcentral` only.** It used to be
+  subscription-wide; narrowing it means a compromised pipeline can damage one
+  resource group, not the whole subscription.
+- Audience: `api://AzureADTokenExchange`.
 
-In traditional apps, you often see `.env` files with passwords. In Enterprise DevOps, this is a critical vulnerability. Azulab solves this using three pillars:
+### Workload → Azure (identity)
+- One **user-assigned managed identity** (`id-azulab-dev-app`) serves both
+  runtimes.
+- Container Apps: the platform projects the identity into the container.
+- AKS: **Workload Identity**. The ServiceAccount is annotated with the client id,
+  the pod carries `azure.workload.identity/use: "true"`, and the webhook projects
+  a short-lived token into the pod. A federated credential on the identity binds
+  it to:
+  - issuer: the AKS OIDC issuer URL
+  - subject: `system:serviceaccount:azulab:azulab`
+  - audience: `api://AzureADTokenExchange`
+- In Kubernetes the deployment sets `AZURE_TOKEN_CREDENTIALS=WorkloadIdentityCredential`,
+  so the SDK uses exactly one credential source instead of probing IMDS or the CLI.
 
-### 1. OIDC (OpenID Connect) — The Trust Bridge
-**The Problem:** How does GitHub Actions tell Azure "I am the official pipeline for this project" without using a long-lived Client Secret?
-
-**The Solution:** **OIDC Federation**.
-- GitHub issues a temporary JWT token.
-- Azure validates this token against the trusted GitHub provider.
-- Azure grants a short-lived access token for the deployment.
-
-**Why?** If a hacker steals your GitHub Actions logs, there is no permanent password to steal.
-
-### 2. Managed Identity — The "Passport"
-**The Problem:** Once the app is running in Azure, how does it authenticate with Key Vault or Storage?
-
-**The Solution:** **User-Assigned Managed Identity**.
-- The Container App is assigned a unique Identity (similar to a service account).
-- Azure internally handles the rotation of certificates.
-- The app uses `DefaultAzureCredential` from the SDK, which automatically finds this identity.
-
-**Why?** No credentials ever exist in the code, the Docker image, or the environment variables.
-
-### 3. RBAC (Role-Based Access Control) — Least Privilege
-**The Problem:** Should the app have "Admin" access to everything in the subscription?
-
-**The Solution:** **Least Privilege Roles**.
-- `Key Vault Secrets User`: Can read secrets, but cannot delete the Vault.
-- `Storage Blob Data Contributor`: Can read/write blobs, but cannot change network rules.
-
-**Why?** If the application is compromised, the attacker is limited to only these specific actions.
+### What does not exist
+- No `Secret` object in the cluster.
+- No client secret in GitHub.
+- No storage account key (see below).
+- No password in the image or in environment variables.
 
 ---
 
-## 📊 Security Summary Table
+## 2. Role assignments (least privilege)
 
-| Vulnerability | Legacy Approach | Azulab Approach | Result |
-| :--- | :--- | :--- | :--- |
-| **Credential Leak** | Store secret in GitHub Secrets | **OIDC Federation** | ❌ No secrets to leak |
-| **Identity Theft** | App uses a username/password | **Managed Identity** | ❌ No password to steal |
-| **Over-privilege** | Subscription Contributor | **RBAC Roles** | ❌ Limited attack surface |
-| **Secret Exposure** | Secrets in `.env` or config | **Azure Key Vault** | ❌ Encrypted at rest |
+| Principal | Role | Scope | Why |
+| --- | --- | --- | --- |
+| GitHub OIDC app | `Contributor` | resource group | deploy Container Apps |
+| App managed identity | `Key Vault Secrets User` | the vault | read one secret |
+| App managed identity | `Storage Blob Data Contributor` | the storage account | read/write the message blob |
+| Deploying user | `Key Vault Administrator` | the vault | bootstrap the first secret |
+
+No principal has subscription-wide access any more.
 
 ---
 
-## 🛠️ Verification Flow
-To verify that this is working, look at:
-- `infra/main.tf`: See the `azurerm_user_assigned_identity` and `azurerm_role_assignment` resources.
-- `app/src/server.js`: See the use of `@azure/identity` and `DefaultAzureCredential`.
+## 3. Storage hardening
+
+| Control | Value | Reason |
+| --- | --- | --- |
+| `shared_access_key_enabled` | **false** | no account master key exists to leak |
+| `allow_nested_items_to_be_public` | false | blobs cannot be made anonymous |
+| `min_tls_version` | TLS1_2 | rejects old clients |
+| `https_traffic_only_enabled` | true | no plaintext transport |
+| `network_rules` | optional IP allow-list | additive, off by default |
+
+Consequence for operators: the Terraform provider authenticates with Entra ID
+(`storage_use_azuread = true`), and CLI commands need `--auth-mode login`.
+Disabling the key without that flag produces
+`403 KeyBasedAuthenticationNotPermitted` on the next plan — a lesson recorded in
+the runbook.
+
+---
+
+## 4. Key Vault hardening
+
+| Control | Value |
+| --- | --- |
+| Authorization model | Azure RBAC (not access policies) |
+| Purge protection | **enabled** |
+| Soft delete | 7 days |
+
+Purge protection means a deleted secret or vault cannot be permanently destroyed
+before the retention window ends — an attacker (or a tired operator) cannot make
+the data unrecoverable. Seven days is deliberate: it is enough for a lab and does
+not reserve the vault name for 90 days after teardown.
+
+`soft_delete_retention_days` cannot be changed after creation; the plan fails if
+you try.
+
+---
+
+## 5. Observability as a security control
+
+A control you cannot audit is not a control. Diagnostic settings send:
+
+- Key Vault: all logs + all metrics → `law-azulab-dev`
+- Blob service: `StorageWrite` and `StorageDelete` → `law-azulab-dev`
+
+`StorageRead` is intentionally excluded: every message read would be logged, which
+adds cost without adding signal in this lab.
+
+This is what makes "who deleted the secret?" or "who wrote that blob?" answerable.
+
+---
+
+## 6. Summary
+
+| Threat | Legacy approach | Azulab approach | Effect |
+| --- | --- | --- | --- |
+| Credential leak | secret in GitHub Secrets | OIDC federation | nothing to leak |
+| Identity theft | username/password | managed identity / workload identity | no password to steal |
+| Over-privilege | subscription Contributor | Contributor on one resource group | bounded blast radius |
+| Storage key leak | account key in config | shared key disabled | no key exists |
+| Secret destruction | soft delete only | purge protection | irreversible deletion blocked |
+| Blind spots | no audit trail | diagnostic settings to Log Analytics | access is auditable |
+| Compromised pod | node-wide identity | per-pod federated identity | pod can only read its own role scope |
+
+---
+
+## 7. Verification
+
+```bash
+# OIDC app scope
+az role assignment list --assignee 112c715b-6e39-47d8-bad5-1a5065751990 --all -o table
+
+# application identity roles
+az role assignment list --assignee 65833aeb-6950-49aa-afd3-0238675727f7 --all -o table
+
+# storage: no key auth
+az storage account show -n stazulabdev6mvarl -g rg-azulab-dev-polandcentral \
+  --query allowSharedKeyAccess
+
+# key vault: purge protection on
+az keyvault show -n kv-azulab-dev-6mvarl \
+  --query '{purge:properties.enablePurgeProtection, softDelete:properties.softDeleteRetentionDays}'
+
+# workload identity inside the pod
+kubectl -n azulab exec deploy/azulab -- env | grep AZURE_
+```
+
+---
+
+## 8. Known gaps (conscious)
+
+| Gap | Impact | Production fix |
+| --- | --- | --- |
+| Public AKS API server | internet-exposed control plane | private cluster + private DNS |
+| AKS local accounts enabled | `get-credentials` yields cluster-admin | `local_accounts_enabled = false` + Azure RBAC for Kubernetes |
+| No private endpoints | traffic over Microsoft backbone, public endpoints | private endpoint for KV and Storage |
+| No WAF / geo-blocking | no edge filtering | Front Door + WAF policy |
+| No image scanning | vulnerable base image could ship | Trivy in CI + Defender for Containers |

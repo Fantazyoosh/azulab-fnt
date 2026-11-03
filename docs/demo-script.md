@@ -124,9 +124,14 @@ Expected: `200` only. No `502`, no `503`.
 
 ```bash
 curl -s -X POST "http://$IP/debug/fail-readiness?value=true&ttl=30"
-kubectl -n azulab get endpoints azulab
+kubectl -n azulab get endpointslice -l kubernetes.io/service-name=azulab \
+  -o jsonpath='{range .items[*].endpoints[?(@.conditions.ready==true)]}{.addresses[*]}{"\n"}{end}'
 kubectl -n azulab get pods
 ```
+
+> Use the ready-only filter, not `kubectl get endpoints`: the deprecated
+> `Endpoints` object hides the detail, and an unfiltered EndpointSlice still
+> lists the address with `ready: false`. You want to show the *routable* set.
 
 Say:
 
@@ -137,7 +142,11 @@ Say:
 Watch it heal itself (the override is time-bounded, 30 seconds here):
 
 ```bash
-kubectl -n azulab get endpoints azulab -w
+while true; do
+  kubectl -n azulab get endpointslice -l kubernetes.io/service-name=azulab \
+    -o jsonpath='{range .items[*].endpoints[?(@.conditions.ready==true)]}{.addresses[*]}{"\n"}{end}'
+  sleep 2
+done   # Ctrl+C to stop
 ```
 
 Say:

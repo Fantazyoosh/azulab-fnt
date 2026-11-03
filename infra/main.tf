@@ -65,16 +65,24 @@ resource "azurerm_key_vault" "main" {
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
   rbac_authorization_enabled = true
-  purge_protection_enabled   = false
+  purge_protection_enabled   = true
+  # Azure does not allow changing this value after creation; 7 days is enough
+  # for a lab and avoids reserving the vault name for 90 days after teardown.
   soft_delete_retention_days = 7
   tags                       = local.tags
 }
 
-resource "azurerm_key_vault_secret" "app_message" {
-  name         = "app-message"
-  value        = "hello from azulab key vault"
-  key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_admin]
+# Terraform used to own the secret *value* here. That meant a secret lived in
+# Git, which is exactly the pattern this project argues against. The value is
+# now bootstrapped out-of-band (see docs/secret-lifecycle.md) and Terraform only
+# stops managing it — `destroy = false` guarantees the secret is not deleted
+# from Key Vault when the resource leaves the state.
+removed {
+  from = azurerm_key_vault_secret.app_message
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "azurerm_storage_account" "main" {
@@ -86,6 +94,10 @@ resource "azurerm_storage_account" "main" {
   https_traffic_only_enabled      = true
   min_tls_version                 = "TLS1_2"
   allow_nested_items_to_be_public = false
+  # The app authenticates with its managed identity. Disabling shared-key auth
+  # removes the account "master password" entirely: a leaked key is impossible
+  # because no key exists.
+  shared_access_key_enabled = false
 
   dynamic "network_rules" {
     for_each = length(var.allowed_storage_ip_ranges) > 0 ? [1] : []
@@ -200,5 +212,42 @@ resource "azurerm_container_app" "app" {
     # Without this, every `terraform plan` after a deploy proposes a downgrade
     # to whatever tag happens to sit in variables or tfvars.
     ignore_changes = [template[0].container[0].image]
+  }
+}
+
+# --- Observability ---------------------------------------------------------
+# Without diagnostic settings the resources are blind spots: a failed Key Vault
+# access or a denied blob request leaves no trace. Logs land in the workspace
+# that Container Apps already uses, so there is a single place to query.
+
+resource "azurerm_monitor_diagnostic_setting" "key_vault" {
+  name                       = "diag-${local.name_prefix}-kv"
+  target_resource_id         = azurerm_key_vault.main.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category_group = "allLogs"
+  }
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+
+# Storage diagnostics attach to the blob service, not to the account: account
+# level settings do not capture data-plane operations.
+# StorageRead is deliberately omitted — every message read would be logged and
+# the volume adds cost without adding signal for this lab.
+resource "azurerm_monitor_diagnostic_setting" "storage_blob" {
+  name                       = "diag-${local.name_prefix}-blob"
+  target_resource_id         = "${azurerm_storage_account.main.id}/blobServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
   }
 }

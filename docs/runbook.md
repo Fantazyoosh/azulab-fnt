@@ -1,120 +1,226 @@
-# 📖 Operational Runbook: Azulab Deployment & Maintenance
+# 📖 Operational Runbook: Azulab
 
-This runbook provides a standard operating procedure (SOP) for managing the Azulab ecosystem. It is designed to ensure that deployments are predictable and that failures are recoverable.
-
----
-
-## 🛠️ 1. The Deployment Lifecycle
-
-### The Deployment Layer (CI/CD Flow)
-The project uses a high-automation deployment layer to move code from Git to Azure.
-
-**Step 1: Continuous Integration (CI)**
-- **Validation**: Every push triggers unit tests in `/app/test`.
-- **Immutable Builds**: A Docker image is built and tagged with the specific **Git Commit SHA**. We avoid using the `latest` tag to ensure we know exactly which version is running.
-- **Registry**: Images are stored in GHCR (GitHub Container Registry).
-
-**Step 2: Continuous Deployment (CD)**
-- **Zero-Trust Auth**: The pipeline connects to Azure using **OIDC**, eliminating the need for stored client secrets.
-- **Revision Management**: Azure Container Apps creates a new **Revision** for every deploy. This allows us to keep the old version running while the new one starts.
-
-**Step 3: Verification (The Safe-Switch)**
-- **Smoke Testing**: The pipeline pings `/health` and `/ready` endpoints.
-- **Traffic Shifting**: Traffic is only shifted to the new revision if smoke tests pass. This ensures **Zero-Downtime Deployments**.
+Standard operating procedure for the two runtimes and the infrastructure behind
+them. Every command here has been executed against the live lab.
 
 ---
 
-## 🏗️ 2. Infrastructure as Code (Terraform)
+## 1. The Deployment Lifecycle
 
-Azulab uses Terraform to ensure the infrastructure is versioned, reproducible, and documented.
+### Step 1 — Continuous Integration
+- Unit tests run on every push (`app/test`).
+- The Docker image is built and tagged with the **full Git commit SHA**. `latest`
+  is never used: the tag must identify exactly one commit forever.
+- The image is pushed to GHCR (`ghcr.io/fantazyoosh/azulab-fnt`).
+- `terraform fmt -check` and `terraform validate` gate every PR.
 
-### The Terraform Lifecycle
-1. **Definition**: Infrastructure is defined in `.tf` files.
-2. **Plan (`terraform plan`)**: Before any change, we generate a plan to see exactly what will be created, modified, or destroyed. This prevents accidental deletions.
-3. **Apply (`terraform apply`)**: The approved plan is executed, and Azure resources are updated to match the code.
+### Step 2 — Continuous Deployment
+- The pipeline authenticates to Azure with **OIDC** — no client secret exists.
+- Container Apps: `az containerapp update --image <sha>` creates a new revision.
+- AKS: deployment is currently **manual** (`kubectl set image` / `kubectl apply`).
+  This is a known gap; the target state is GitOps (Argo CD / Flux).
 
-### State Management & Drift
-- **Remote State**: The `terraform.tfstate` file (the "map" of the infrastructure) is stored remotely. This allows the GitHub Actions pipeline to know the current state of the cloud without needing local files.
-- **Infrastructure Drift**: If a resource is changed manually in the Azure Portal, it creates "Drift". Terraform detects this during the next `plan` and offers to revert the manual change back to the coded state.
-
----
-
-## 🛡️ 3. Trust Chain & Security (Zero-Trust)
-
-The project implements a multi-layered security model to eliminate the need for hardcoded credentials.
-
-### GitHub $\rightarrow$ Azure (OIDC)
-Instead of storing a Client Secret in GitHub, we use **OpenID Connect (OIDC)**. GitHub issues a temporary token that Azure validates, granting short-lived access to the deployment pipeline.
-
-### Application Identity (Managed Identity & RBAC)
-The app does not use passwords to access Azure services:
-- **Managed Identity**: The Container App is assigned a unique identity (a "digital passport").
-- **RBAC (Role-Based Access Control)**: This identity is granted specific, limited roles:
-    - `Key Vault Secrets User`: Read-only access to secrets.
-    - `Storage Blob Data Contributor`: Access to read/write broadcast messages.
-
-### Environment Variables
-We use **Environment Variables** to store non-sensitive configuration (e.g., `KEYVAULT_URL`, `STORAGE_ACCOUNT_URL`). The app reads these URLs and then uses its Managed Identity to authenticate.
+### Step 3 — Verification
+- Container Apps: the CD workflow polls `/health` for up to 150 seconds.
+- AKS: `kubectl rollout status deploy/azulab --timeout=240s`, then `curl`.
+- **Important:** in Container Apps `Single` revision mode the new revision takes
+  traffic as soon as it is ready. A failed smoke test does **not** block traffic —
+  it fails the pipeline, and the operator must roll back. The "traffic only shifts
+  if smoke passes" claim would require `Multiple` mode with traffic weights.
 
 ---
 
-## 🚨 4. Incident Response & Rollback
+## 2. The Two Runtimes
 
-### How to execute a Rollback
-If a deployment is "Green" but the app behaves incorrectly:
-1. Go to **Azure Portal** $\rightarrow$ **Container App** $\rightarrow$ **Revisions**.
+| | Container Apps | AKS |
+| --- | --- | --- |
+| Name | `ca-azulab-dev` | `aks-azulab-dev` |
+| Region | `polandcentral` | `swedencentral` |
+| Scale | 0 → 2 replicas | fixed 2 replicas, 1 node |
+| Identity | user-assigned managed identity | Workload Identity (same UAMI) |
+| Deploy | `az containerapp update` | `kubectl apply -k k8s/` |
+| Rollback | activate previous revision | `kubectl rollout undo` |
+| Cost when idle | ~0 | ~2.93 $/day |
+
+Both run the same image and the same application code.
+
+### AKS commands
+
+```bash
+az aks get-credentials -g rg-azulab-dev-polandcentral -n aks-azulab-dev --overwrite-existing
+
+kubectl get nodes
+kubectl -n azulab get deploy,rs,pods,svc,endpoints -o wide
+
+# deploy a new image
+kubectl -n azulab set image deploy/azulab azulab=ghcr.io/fantazyoosh/azulab-fnt:<sha>
+kubectl -n azulab rollout status deploy/azulab --timeout=240s
+
+# stop / start (cost control)
+kubectl -n azulab delete service azulab   # releases the load balancer
+az aks stop  -g rg-azulab-dev-polandcentral -n aks-azulab-dev
+az aks start -g rg-azulab-dev-polandcentral -n aks-azulab-dev
+kubectl apply -k k8s/                     # recreate the Service after start
+```
+
+---
+
+## 3. Infrastructure as Code (Terraform)
+
+### Lifecycle
+1. Declared in `.tf` files.
+2. `terraform plan` shows exactly what will change.
+3. `terraform apply` converges Azure to the code.
+
+### State
+- The state file is **local** (`infra/terraform.tfstate`) and gitignored.
+- There is **no remote backend**. Only one operator (this workstation) can apply.
+  A team would use an Azure Storage backend with state locking.
+- Back up before every apply: `cp terraform.tfstate terraform.tfstate.bak-$(date +%F-%H%M)`.
+
+### What Terraform does **not** own
+- The running Container App image. CD updates it, so the resource has
+  `lifecycle.ignore_changes = [template[0].container[0].image]`.
+  Without that, every plan after a deploy proposed a downgrade to the tag pinned
+  in `terraform.tfvars`. This actually happened and is the reason for the rule.
+- The AKS `upgrade_settings` block is declared explicitly, because the provider
+  reads API defaults back and otherwise proposes removing the whole block on
+  every plan.
+
+### Drift policy
+Never edit resources in the portal. If you do, the next plan proposes to revert
+it — and reverting a "small fix" during a demo is how demos die.
+
+---
+
+## 4. Trust Chain (Zero-Trust)
+
+### GitHub → Azure (OIDC)
+Federated credentials on the `azulab-github-oidc` app registration restrict access
+to this repository, the `main` branch and the `production` environment. The app has
+**Contributor on the resource group only** — not on the subscription. Blast radius
+is one resource group.
+
+### Application identity
+- **Container Apps**: user-assigned managed identity, attached to the app.
+- **AKS**: the same identity, reached through Workload Identity.
+- Roles: `Key Vault Secrets User` (read secrets) and `Storage Blob Data
+  Contributor` (read/write blobs). Nothing else.
+
+### Storage hardening
+- `shared_access_key_enabled = false` — there is no account key to leak.
+- Because of that, the **Terraform provider** must use Entra ID for storage
+  operations: `storage_use_azuread = true` in `provider.tf`. Without it, every
+  plan fails with `KeyBasedAuthenticationNotPermitted`.
+- CLI access must use `az storage ... --auth-mode login`.
+
+### Key Vault hardening
+- RBAC authorization, purge protection **on**, soft delete 7 days.
+- `soft_delete_retention_days` cannot be changed after creation — 7 is deliberate,
+  so the vault name is not reserved for 90 days after teardown.
+
+### Environment variables
+Only non-sensitive configuration (`KEY_VAULT_URL`, `STORAGE_ACCOUNT_URL`,
+`CONTAINER_NAME`). The app reads the URL and authenticates with its identity.
+
+---
+
+## 5. Incident Response & Rollback
+
+### Container Apps
+1. Portal → Container App → Revisions.
 2. Select the last known stable revision.
-3. Set **Traffic Split** to $100\%$ for that stable revision.
-4. **Result**: Immediate recovery (Recovery Time Objective $\approx$ 10 seconds).
+3. Set traffic to 100% on it.
+4. Recovery time ≈ 10 seconds, no rebuild.
 
-### Rollback Log
-All rollback events are recorded in [`docs/rollback-log.md`](docs/rollback-log.md) to analyze the root cause.
+### AKS
+```bash
+kubectl -n azulab rollout history deploy/azulab
+kubectl -n azulab rollout undo deploy/azulab
+kubectl -n azulab rollout status deploy/azulab
+```
 
----
+### A single bad pod
+```bash
+kubectl -n azulab describe pod <pod>          # events explain most failures
+kubectl -n azulab logs <pod> --previous       # crash logs from the last attempt
+kubectl -n azulab delete pod <pod>            # let the ReplicaSet replace it
+```
 
-## 🔍 5. Troubleshooting & Lessons Learned (The "War Room")
-
-This section documents real-world issues encountered during the development of Azulab.
-
-### 🪤 Trap 1: The "Missing Files" Error
-**Symptom**: `Cannot GET /` or `404 Not Found` despite a green pipeline.
-**Root Cause**: The `Dockerfile` used `COPY src ./src` but missed `COPY public ./public`. Because the build context was set to the `./app` folder, the files existed locally but never entered the image.
-**Fix**: Always ensure all static asset folders are explicitly copied in the `Dockerfile`.
-
-### ⏳ Trap 2: The "Identity Lag" (403 Forbidden)
-**Symptom**: The app starts, but logs show `403 Forbidden` when accessing Key Vault.
-**Root Cause**: Azure Managed Identities can take 30-60 seconds to propagate across the Azure Active Directory (Entra ID) after being created or assigned.
-**Fix**: Implement a retry mechanism in the app or wait 1 minute before the first health check.
-
-### ⚠️ Trap 3: Infrastructure Drift
-**Symptom**: `terraform apply` wants to destroy and recreate a resource you manually edited in the portal.
-**Root Cause**: Manual changes in the Azure Portal create "Drift". Terraform's state file no longer matches reality.
-**Fix**: **NEVER** edit production resources manually. Always update the `.tf` files and apply via the pipeline.
+### Total outage (no pod Ready)
+```bash
+kubectl -n azulab get endpoints azulab        # empty = nothing is ready
+kubectl -n azulab exec deploy/azulab -- wget -qO- localhost:8080/ready
+```
+If the dependency is down, the pods stay alive but out of rotation. Fix the
+dependency; do not restart the pods.
 
 ---
 
-## 📈 6. Health Check Definitions
+## 6. Health Check Definitions
 
-| Endpoint | Type | Purpose | Failure Action |
-| :--- | :--- | :--- | :--- |
-| `/health` | Liveness | Is the Node.js process running? | Azure restarts the container. |
-| `/ready` | Readiness | Can the app reach Key Vault & Storage? | Azure stops sending traffic to this revision. |
-| `/api/message`| Smoke | Is the business logic returning a valid JSON? | Pipeline marks deployment as failed. |
+| Endpoint | Probe | Checks | Failure action |
+| --- | --- | --- | --- |
+| `/health` | liveness / startup | process only | restart the container |
+| `/ready` | readiness | Key Vault secret loaded + Blob Storage reachable | remove from Service endpoints |
+| `/api/message` | smoke | business logic returns valid JSON | pipeline fails |
+| `/version` | diagnostic | pod, node, namespace, image SHA | none |
+
+Liveness deliberately does **not** check dependencies.
 
 ---
 
-## ⚙️ 7. Pipeline Behavior: The "Trigger" Lesson
+## 7. Troubleshooting & Lessons Learned
 
-### Why does a documentation change trigger a full Azure deploy?
-You may notice that updating a `.md` file in `/docs` still triggers the full CI/CD pipeline. This is because the GitHub Actions trigger is currently set to the **repository level** (`on: push`), not the **folder level**.
+### Trap 1 — Missing static files
+**Symptom:** `Cannot GET /` with a green pipeline.
+**Cause:** `Dockerfile` copied `src` but not `public`.
+**Fix:** copy every runtime asset explicitly.
 
-**Current Flow:**
-`Any Change in Repo` $\rightarrow$ `Trigger CD` $\rightarrow$ `Build Image` $\rightarrow$ `Deploy to Azure`.
+### Trap 2 — Identity lag (403)
+**Symptom:** the app starts, Key Vault returns 403.
+**Cause:** RBAC propagation takes 30–60 seconds.
+**Fix:** retry with backoff (the app now retries the secret load five times).
 
-### How to optimize this (Path Filtering)
-In larger production environments, building a Docker image for a typo fix in the README is a waste of compute resources. This is solved using `paths-ignore`.
+### Trap 3 — Terraform fighting the CD pipeline
+**Symptom:** `terraform plan` wants to change the image back after every deploy.
+**Cause:** the image is pinned in `terraform.tfvars`, but CD updates it.
+**Fix:** `ignore_changes` on the container image. Terraform owns infrastructure;
+CD owns the artifact.
 
-**Example Configuration:**
+### Trap 4 — AKS rejected every VM size
+**Symptom:** `400 BadRequest: The VM size of Standard_B2s is not allowed…`
+**Cause:** Free Trial subscription, per-region SKU restrictions. `polandcentral`
+only exposes HPC/GPU sizes to this offer.
+**Fix:** verify with `Microsoft.Compute/skus` restrictions, then pick a region where
+the size is allowed (`swedencentral` here).
+
+### Trap 5 — Storage locked out after hardening
+**Symptom:** `403 KeyBasedAuthenticationNotPermitted` during `terraform plan`.
+**Cause:** shared key disabled, provider still using key auth.
+**Fix:** `storage_use_azuread = true` in the provider block.
+
+### Trap 6 — Readiness switch that could not be turned off
+**Symptom:** after `fail-readiness`, the pod left the Service and became
+unreachable through the LoadBalancer.
+**Cause:** the flag was permanent, and the Service no longer routed to that pod.
+**Fix:** the override is time-bounded (`ttl`, default 60 s) and auto-resets.
+
+### Trap 7 — Corrupted HTML shipped to production
+**Symptom:** broken viewport meta and a `ReferenceError` in the browser console.
+**Cause:** a bad string replacement was committed and merged.
+**Fix:** review the rendered output, not only the diff. The UI now shows runtime
+identity, so a broken page is immediately visible.
+
+---
+
+## 8. Pipeline Behavior
+
+### Why a docs change triggers a deploy
+The trigger is repository-level (`on: push`), not path-filtered. A README typo
+still builds and deploys an image.
+
+**Optimization** (not enabled, because it would skip the Terraform validate job):
 ```yaml
 on:
   push:

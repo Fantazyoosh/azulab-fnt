@@ -1,0 +1,67 @@
+# Azulab — verification evidence
+# Generated: 2026-11-03T15:02:20+01:00
+# Public endpoint: http://172.130.54.138/
+
+## Cluster
+$ kubectl get nodes
+NAME                             STATUS   ROLES    AGE   VERSION
+aks-system-32184980-vmss000000   Ready    <none>   46m   v1.36.5
+
+## Workload
+$ kubectl -n azulab get deploy,pods,svc,pdb
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/azulab   2/2     2            2           41m
+
+NAME                          READY   STATUS    RESTARTS   AGE
+pod/azulab-5f8bdb8c7d-7nbf8   1/1     Running   0          92s
+pod/azulab-5f8bdb8c7d-k2gwm   1/1     Running   0          82s
+
+NAME             TYPE           CLUSTER-IP   EXTERNAL-IP      PORT(S)        AGE
+service/azulab   LoadBalancer   10.0.38.79   172.130.54.138   80:32433/TCP   41m
+
+NAME                                MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+poddisruptionbudget.policy/azulab   1               N/A               1                     41m
+
+## Ready endpoints (what kube-proxy actually routes to)
+10.244.0.26
+10.244.0.27
+
+## Application
+$ curl http://172.130.54.138/version
+{"service":"azulab","version":"1c4f897b150a820e5700e6aebdf4cdd63255f57b","pod":"azulab-5f8bdb8c7d-k2gwm","node":"aks-system-32184980-vmss000000","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:1c4f897b150a820e5700e6aebdf4cdd63255f57b","startedAt":"2026-11-03T14:01:01.013Z","now":"2026-11-03T14:02:21.016Z"}
+$ curl http://172.130.54.138/ready
+{"status":"ready","checks":{"keyVault":"ok","storage":"ok","storageConsecutiveFailures":0}}
+$ curl http://172.130.54.138/api/message
+{"message":"hello from azulab key vault (Sekret z Vault)","source":"vault"}
+
+## Pod distribution (10 requests through the LoadBalancer)
+      4 azulab-5f8bdb8c7d-7nbf8
+      6 azulab-5f8bdb8c7d-k2gwm
+
+## Zero-downtime rollout (measured during rehearsal)
+HTTP codes while 'kubectl rollout restart' replaced both replicas:
+     90 200
+total requests: 90, non-2xx: 0
+
+## Readiness failure with ttl=20
+before : 2 ready endpoints
+during : 1 ready endpoint, one pod Ready=false, /health still 200
+after  : 2 ready endpoints (auto-reset)
+
+## Security posture
+{
+  "purgeProtection": true,
+  "rbac": true,
+  "softDeleteDays": 7
+}
+{
+  "minTls": "TLS1_2",
+  "sharedKeyEnabled": false
+}
+Role         Scope
+-----------  ----------------------------------------------------------------------------------------------
+Contributor  /subscriptions/f2c06f27-c982-4ecb-b81b-604acd6f52d3/resourceGroups/rg-azulab-dev-polandcentral
+
+## Diagnostic settings
+diag-azulab-dev-kv
+diag-azulab-dev-blob
