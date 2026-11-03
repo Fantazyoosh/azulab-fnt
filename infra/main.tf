@@ -194,4 +194,11 @@ resource "azurerm_container_app" "app" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    # The CD pipeline owns the running image; Terraform owns everything else.
+    # Without this, every `terraform plan` after a deploy proposes a downgrade
+    # to whatever tag happens to sit in variables or tfvars.
+    ignore_changes = [template[0].container[0].image]
+  }
 }

@@ -33,6 +33,14 @@ resource "azurerm_kubernetes_cluster" "main" {
     vm_size              = "Standard_D2as_v5" # 2 vCPU / 8 GiB; 4 vCPU quota available
     auto_scaling_enabled = false
     max_pods             = 30
+
+    # Declared explicitly so the provider does not try to remove the defaults
+    # it reads back from the API on every plan (upgrade_settings drift).
+    upgrade_settings {
+      max_surge                     = "10%"
+      drain_timeout_in_minutes      = 0
+      node_soak_duration_in_minutes = 0
+    }
   }
 
   identity {
@@ -53,9 +61,9 @@ resource "azurerm_kubernetes_cluster" "main" {
 # The subject is fixed by the namespace and ServiceAccount name in k8s/:
 #   system:serviceaccount:<namespace>:<serviceaccount>
 resource "azurerm_federated_identity_credential" "aks_app" {
-  name      = "aks-azulab"
-  parent_id = azurerm_user_assigned_identity.app.id
-  audience  = ["api://AzureADTokenExchange"]
-  issuer    = azurerm_kubernetes_cluster.main.oidc_issuer_url
-  subject   = "system:serviceaccount:azulab:azulab"
+  name                      = "aks-azulab"
+  user_assigned_identity_id = azurerm_user_assigned_identity.app.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
+  subject                   = "system:serviceaccount:azulab:azulab"
 }
