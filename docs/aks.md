@@ -100,7 +100,7 @@ credential source.
 | `deployment.yaml` | `maxUnavailable: 0` + readiness probe = zero-downtime; `preStop` sleep lets kube-proxy drain; liveness checks only the process |
 | `service.yaml` | `LoadBalancer` with an HTTP health probe on `/health` |
 | `pdb.yaml` | `minAvailable: 1` protects against node drains |
-| `kustomization.yaml` | the image tag lives in exactly one place |
+| `kustomization.yaml` | baseline image tag; CD injects the immutable tag on every merge |
 
 ### Probe design
 

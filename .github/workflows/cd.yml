@@ -80,6 +80,36 @@ jobs:
           echo "smoke test failed: /health or /ready did not return 200"
           exit 1
 
+      # Same image, second runtime. Container Apps and AKS track the same
+      # immutable tag on every merge; the manifests in k8s/ are the baseline,
+      # CD injects the tag produced by this run.
+      - name: Deploy to AKS
+        run: |
+          set -euo pipefail
+          az aks get-credentials \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AKS_CLUSTER }}" \
+            --overwrite-existing
+          kubectl -n azulab set image deploy/azulab \
+            azulab="${{ steps.image.outputs.image }}"
+          kubectl -n azulab rollout status deploy/azulab --timeout=240s
+
+      - name: Smoke test AKS
+        run: |
+          set -euo pipefail
+          IP=$(kubectl -n azulab get svc azulab -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          for i in $(seq 1 30); do
+            if curl -fsS "http://$IP/health" >/tmp/aks-health.json \
+              && curl -fsS "http://$IP/ready" >/tmp/aks-ready.json; then
+              cat /tmp/aks-health.json; echo
+              cat /tmp/aks-ready.json; echo
+              jq -e '.status == "ready"' /tmp/aks-ready.json >/dev/null
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "AKS smoke test failed"; exit 1
+
       - name: Print previous revisions
         if: always()
         run: |
