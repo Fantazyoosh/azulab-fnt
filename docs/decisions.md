@@ -220,3 +220,27 @@ deploy.
   scopes, one human `Owner`, no data-plane roles for automation.
 - Debugging "why can this principal do X" now starts with group membership, not
   with direct role assignments.
+
+---
+
+## ADR-014 — Easy Auth on Container Apps, public AKS
+
+**Context.** The security thread ends with "who can use the application?". The app
+had no user authentication: anyone with the URL could read or change the message.
+AKS must stay reachable for the orchestration demo, from any device.
+
+**Decision.** Enable Container Apps built-in authentication (Easy Auth) with
+Entra ID. Exclude `/health` and `/ready` for probes and the CD smoke test. Keep
+AKS public.
+
+**Consequences.**
+- Users sign in with a tenant account; the app receives identity headers and
+  never validates tokens itself.
+- **One long-lived credential now exists**: the Easy Auth client secret, stored in
+  the Container App secret store and rotated yearly. This is the only exception to
+  the secret-less rule, and it is a platform constraint (Easy Auth is a
+  confidential client).
+- The CD smoke test asserts `401` on `/` instead of `200` on `/api/message`;
+  application-level checks moved to `/health` and `/ready`.
+- Protecting AKS the same way would need an ingress with an OIDC proxy
+  (oauth2-proxy); that is a different lesson and is out of scope.

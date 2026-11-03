@@ -238,6 +238,16 @@ Say, in this order:
 
 ---
 
+## 10. "User authentication" (optional, 1 min)
+
+> The Container App is protected by Easy Auth with Entra ID. Open
+> `https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/`
+> and it redirects to the tenant login; `/health` and `/ready` stay open for
+> probes. AKS stays public so the orchestration demo works from any device.
+> Same image, two access models.
+
+---
+
 ## Fallbacks
 
 | Problem | Immediate fix |

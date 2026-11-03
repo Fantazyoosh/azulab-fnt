@@ -63,19 +63,21 @@ jobs:
           URL="https://${{ vars.AZURE_CONTAINER_APP_FQDN }}"
           for i in $(seq 1 30); do
             if curl -fsS "$URL/health" >/tmp/health.json \
-              && curl -fsS "$URL/ready" >/tmp/ready.json \
-              && curl -fsS "$URL/api/message" >/tmp/message.json; then
+              && curl -fsS "$URL/ready" >/tmp/ready.json; then
               cat /tmp/health.json; echo
               cat /tmp/ready.json; echo
-              cat /tmp/message.json; echo
               jq -e '.status == "ready"' /tmp/ready.json >/dev/null
-              jq -e '.message | length > 0' /tmp/message.json >/dev/null
-              jq -e '.source == "blob" or .source == "vault"' /tmp/message.json >/dev/null
+
+              # Easy Auth protects the app. /health and /ready are excluded for
+              # probes; every other path is 401 without a session.
+              code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/")
+              test "$code" = "401" || { echo "auth not enforced on /: $code"; exit 1; }
+
               exit 0
             fi
             sleep 5
           done
-          echo "smoke test failed: /health, /ready or /api/message did not return 200"
+          echo "smoke test failed: /health or /ready did not return 200"
           exit 1
 
       - name: Print previous revisions

@@ -31,6 +31,7 @@ the reverse.
 | `id-azulab-dev-app` | managed identity | `Storage Blob Data Contributor` | the storage account | runtime identity; narrow |
 | `aks-azulab-dev` cluster identity | managed identity | `Contributor` | `MC_…_swedencentral` | created by AKS to manage its own node resource group |
 | AKS kubelet identity | managed identity | *none* | — | no ACR: the image is public on GHCR |
+| `azulab-web` | app registration | *none* | — | user sign-in for Easy Auth only; no Azure permissions |
 
 Runtime identities stay direct on purpose: they are created and destroyed by
 Terraform, have exactly one scope, and should not depend on group membership

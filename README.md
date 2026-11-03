@@ -18,11 +18,12 @@ The same image runs on two runtimes:
 
 | Runtime | Role |
 | :--- | :--- |
-| **Azure Container Apps** | serverless, scale-to-zero, cheapest public demo |
-| **Azure Kubernetes Service** | orchestrated containers — the part worth learning |
+| **Azure Container Apps** | serverless, scale-to-zero, **requires Entra ID login** (Easy Auth) |
+| **Azure Kubernetes Service** | orchestrated containers — public demo, zero-downtime |
 
 Both use the same managed identity, so the application never knows where it runs.
-See **[`docs/aks.md`](docs/aks.md)** for the cluster design and
+See **[`docs/aks.md`](docs/aks.md)** for the cluster design,
+**[`docs/entra-login.md`](docs/entra-login.md)** for the login flow and
 **[`docs/demo-script.md`](docs/demo-script.md)** for the walkthrough.
 
 ---
@@ -70,6 +71,8 @@ If you are new to DevOps, follow this order to understand the project:
     $\rightarrow$ *The two components, layer by layer, with labs and audit proofs.*
 12. **[References (`docs/references.md`)](docs/references.md)** 
     $\rightarrow$ *The official Microsoft Learn reading list for RBAC, Key Vault, Blob and WAF.*
+13. **[Entra ID login (`docs/entra-login.md`)](docs/entra-login.md)** 
+    $\rightarrow$ *Easy Auth on Container Apps: the flow, the secret trade-off, how to disable it.*
 
 ---
 
