@@ -5,16 +5,29 @@ Run from the repository root.
 
 ---
 
-## 0. Pre-flight (before the call)
+## 0. Pre-flight (15 minutes before the call)
 
 ```bash
-az account show --query "{sub:name, id:id}" -o table
+# Cluster stopped after the last session? Start it now (3-5 minutes).
+az aks show -g rg-azulab-dev-polandcentral -n aks-azulab-dev --query powerState.code -o tsv
+az aks start -g rg-azulab-dev-polandcentral -n aks-azulab-dev
+
 az aks get-credentials -g rg-azulab-dev-polandcentral -n aks-azulab-dev --overwrite-existing
 kubectl get nodes
 kubectl -n azulab get pods
+
+# Teardown deletes the Service; recreate only it (not the whole kustomization,
+# which would roll the image back to the baseline tag).
+kubectl -n azulab get svc azulab || kubectl apply -f k8s/service.yaml
+
+IP=$(kubectl -n azulab get svc azulab -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "http://$IP/"
+curl -s "http://$IP/health"
+curl -s "http://$IP/ready"
 ```
 
-Expected: one node `Ready`, two pods `Running`, both `1/1`.
+Expected: one node `Ready`, two pods `Running`, both `1/1`, and a new public IP
+(the LoadBalancer IP changes when the Service is recreated).
 
 Have these open in separate panes:
 - browser: `http://<EXTERNAL-IP>/`

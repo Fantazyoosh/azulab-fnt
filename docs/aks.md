@@ -134,12 +134,27 @@ notifies at 80% of actual spend and 100% of the forecast. It is created only whe
 Stop the cluster when it is not needed:
 
 ```bash
-kubectl -n azulab delete service azulab   # release the load balancer first
+kubectl -n azulab delete service azulab   # release the load balancer and its IP
 az aks stop -g rg-azulab-dev-polandcentral -n aks-azulab-dev
 ```
 
 `az aks stop` deallocates the node VMs; managed disks keep billing (a few cents
-per day). `az aks start` brings it back with the same node and public IP config.
+per day). The Deployment and pods survive in etcd. **The Service and its public
+IP do not.** On start:
+
+```bash
+az aks start -g rg-azulab-dev-polandcentral -n aks-azulab-dev
+az aks get-credentials -g rg-azulab-dev-polandcentral -n aks-azulab-dev --overwrite-existing
+
+# Recreate ONLY the Service. `kubectl apply -k k8s/` would also reset the image
+# to the baseline tag pinned in the manifest.
+kubectl apply -f k8s/service.yaml
+kubectl -n azulab get svc azulab -w        # a NEW public IP is assigned
+```
+
+While the cluster is stopped, the CD `Deploy to AKS` step fails — a code merge
+shows a red pipeline (Container Apps still deploys). Docs-only merges are skipped
+by `paths-ignore`.
 
 ---
 
