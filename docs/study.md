@@ -183,6 +183,7 @@ Dlatego awaria Key Vault drenuje ruch, a nie restartuje wszystkich replik."
 
 | Chcę zrozumieć | Plik |
 | --- | --- |
+| Dashboard na żywo | `http://<AKS-IP>/` — zakładki Overview / Architecture / Security / Delivery |
 | RBAC i grupy | `docs/rbac-matrix.md`, `docs/drill-rbac-kv.md` (A) |
 | Key Vault | `docs/secret-lifecycle.md`, `docs/deep-dive-keyvault-blob.md` (1) |
 | Blob Storage | `docs/deep-dive-keyvault-blob.md` (2) |

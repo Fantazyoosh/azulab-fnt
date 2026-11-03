@@ -1,45 +1,54 @@
 # Azulab — verification evidence
-# Generated: 2026-11-03T17:32:14+01:00
+# Generated: 2026-11-03T17:59:06+01:00
 # AKS endpoint: http://74.158.77.185/
-# AKS image: ghcr.io/fantazyoosh/azulab-fnt:dbed82244a6c6457793a74fad70904128a930765
-zsh:6: no matches found: properties.template.containers[0].image
-# ACA image: 
+# AKS image: ghcr.io/fantazyoosh/azulab-fnt:3075b49585a99ca772358bb91d5f841fbb04ea5c
+# ACA image: ghcr.io/fantazyoosh/azulab-fnt:3075b49585a99ca772358bb91d5f841fbb04ea5c
+
+## Dashboard
+$ curl -s http://74.158.77.185/ | grep title
+<title>Azulab — one image, two runtimes
+tabs: Overview / Architecture / Security / Delivery
+/            200
+/styles.css  200
+/app.js      200
+/health      200
+/ready       200
 
 ## Cluster
 $ kubectl get nodes
-NAME                             STATUS   ROLES    AGE     VERSION
-aks-system-32184980-vmss000001   Ready    <none>   3m46s   v1.36.5
+NAME                             STATUS   ROLES    AGE   VERSION
+aks-system-32184980-vmss000001   Ready    <none>   30m   v1.36.5
 
 ## Workload
 $ kubectl -n azulab get deploy,pods,svc,pdb
 NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/azulab   2/2     2            2           3h11m
+deployment.apps/azulab   2/2     2            2           3h38m
 
 NAME                          READY   STATUS    RESTARTS   AGE
-pod/azulab-5c4fd64f56-4hjw6   1/1     Running   0          13m
-pod/azulab-5c4fd64f56-ntj2d   1/1     Running   0          13m
+pod/azulab-785946dd78-kvwqr   1/1     Running   0          94s
+pod/azulab-785946dd78-rzx9p   1/1     Running   0          82s
 
 NAME             TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)        AGE
-service/azulab   LoadBalancer   10.0.98.238   74.158.77.185   80:30246/TCP   118s
+service/azulab   LoadBalancer   10.0.98.238   74.158.77.185   80:30246/TCP   28m
 
 NAME                                MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
-poddisruptionbudget.policy/azulab   1               N/A               1                     3h11m
+poddisruptionbudget.policy/azulab   1               N/A               1                     3h38m
 
 ## Ready endpoints
-10.244.0.11
-10.244.0.12
+10.244.0.15
+10.244.0.16
 
 ## Application (AKS)
 $ curl http://74.158.77.185/version
-{"service":"azulab","version":"dbed82244a6c6457793a74fad70904128a930765","pod":"azulab-5c4fd64f56-4hjw6","node":"aks-system-32184980-vmss000001","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:dbed82244a6c6457793a74fad70904128a930765","startedAt":"2026-11-03T16:29:31.699Z","now":"2026-11-03T16:32:14.964Z"}
+{"service":"azulab","version":"3075b49585a99ca772358bb91d5f841fbb04ea5c","pod":"azulab-785946dd78-kvwqr","node":"aks-system-32184980-vmss000001","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:3075b49585a99ca772358bb91d5f841fbb04ea5c","startedAt":"2026-11-03T16:57:39.363Z","now":"2026-11-03T16:59:07.490Z"}
 $ curl http://74.158.77.185/ready
 {"status":"ready","checks":{"keyVault":"ok","storage":"ok","storageConsecutiveFailures":0}}
 $ curl http://74.158.77.185/api/message
 {"message":"hello from azulab key vault (Sekret z Vault)","source":"vault"}
 
 ## Pod distribution (10 requests)
-      5 azulab-5c4fd64f56-4hjw6
-      5 azulab-5c4fd64f56-ntj2d
+      4 azulab-785946dd78-kvwqr
+      6 azulab-785946dd78-rzx9p
 
 ## Container Apps (Entra login)
 /health        200

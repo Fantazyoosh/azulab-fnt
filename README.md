@@ -43,6 +43,17 @@ See **[`docs/aks.md`](docs/aks.md)** for the cluster design,
 
 ---
 
+### 🖥️ The dashboard
+
+The application is a four-tab dashboard: **Overview** (live pod, node, version and
+readiness), **Architecture** (the system map), **Security** (identity, RBAC, Key
+Vault, storage and audit) and **Delivery** (pipeline and cost). The tabs are the
+presentation; the backend is unchanged.
+
+![Azulab dashboard on AKS](docs/img/aks-ui.png)
+
+---
+
 ## 📂 Documentation Hub (Your Learning Path)
 
 **Start here:**
