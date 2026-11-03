@@ -76,6 +76,8 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            # Baseline values; CD overwrites both with the tag it deploys so the
+            # UI never reports a version different from the running image.
             - name: APP_VERSION
               value: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
             - name: APP_IMAGE

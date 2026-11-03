@@ -90,8 +90,12 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --name "${{ vars.AKS_CLUSTER }}" \
             --overwrite-existing
-          kubectl -n azulab set image deploy/azulab \
-            azulab="${{ steps.image.outputs.image }}"
+          IMAGE="${{ steps.image.outputs.image }}"
+          TAG="${IMAGE##*:}"
+          kubectl -n azulab set image deploy/azulab azulab="$IMAGE"
+          # Keep /version honest: the env vars are the app's only view of the
+          # build. Without this they would still report the baseline tag.
+          kubectl -n azulab set env deploy/azulab APP_VERSION="$TAG" APP_IMAGE="$IMAGE"
           kubectl -n azulab rollout status deploy/azulab --timeout=240s
 
       - name: Smoke test AKS
