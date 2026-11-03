@@ -25,7 +25,7 @@ Everything else (`/`, `/api/*`, `/version`) returns `401` without a session.
 | App registration | `azulab-web` (`adc8c8ac-0205-4931-99c0-515ad3d6ce33`) |
 | Sign-in audience | single tenant (`AzureADMyOrg`) |
 | Redirect URI | `https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/.auth/login/aad/callback` |
-| Client secret | Container App secret `aad-client-secret` (not in Git, not in Terraform) |
+| Client secret | Container App secret `microsoft-provider-authentication-secret`, created by the Easy Auth command (not in Git, not in Terraform) |
 | Excluded paths | `/health`, `/ready` |
 | Unauthenticated action | `RedirectToLoginPage` for browsers; `401` for API clients |
 
@@ -38,6 +38,8 @@ a certificate. There is no managed-identity option in the auth config.
 
 - The secret is stored in the Container App secret store (encrypted at rest,
   managed by Azure), not in Git and not in Terraform state.
+- The Container App resource ignores `secret` changes
+  (`lifecycle.ignore_changes`), so a plan never deletes the Easy Auth secret.
 - It rotates annually; re-running the script rotates it immediately.
 - A certificate is the stronger alternative, at the cost of managing a
   certificate lifecycle.
