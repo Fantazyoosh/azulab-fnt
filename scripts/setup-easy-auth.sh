@@ -16,7 +16,6 @@ set -euo pipefail
 RG="${RG:-rg-azulab-dev-polandcentral}"
 APP="${APP:-ca-azulab-dev}"
 WEB_APP_NAME="${WEB_APP_NAME:-azulab-web}"
-SECRET_NAME="${SECRET_NAME:-aad-client-secret}"
 
 FQDN=$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)
 TENANT=$(az account show --query tenantId -o tsv)
@@ -38,16 +37,17 @@ fi
 az ad sp show --id "$APP_ID" >/dev/null 2>&1 || az ad sp create --id "$APP_ID" >/dev/null
 az ad app update --id "$APP_ID" --enable-id-token-issuance true >/dev/null
 
-# The secret lives in the Container App secret store, not in the repository.
+# The secret is created by the auth command itself and stored as the Container
+# App secret `microsoft-provider-authentication-secret`. It never enters Git or
+# Terraform state; the Container App resource ignores secret changes.
 SECRET=$(az ad app credential reset \
   --id "$APP_ID" --append --display-name easy-auth --years 1 \
   --query password -o tsv)
-az containerapp secret set -g "$RG" -n "$APP" --secrets "$SECRET_NAME=$SECRET" >/dev/null
 
 # Provider first, then the global policy (action + excluded paths).
 az containerapp auth microsoft update -g "$RG" -n "$APP" \
   --client-id "$APP_ID" \
-  --client-secret-name "$SECRET_NAME" \
+  --client-secret "$SECRET" \
   --tenant-id "$TENANT" \
   --yes >/dev/null
 
@@ -68,7 +68,7 @@ Easy Auth enabled.
   excluded     /health, /ready
   redirect     $REDIRECT
   app id       $APP_ID
-  secret name  $SECRET_NAME (Container App secret, rotates in 1 year)
+  secret       Container App secret (created by the auth command, rotates in 1 year)
 
 Disable it again with:
   az containerapp auth update -g $RG -n $APP --enabled false

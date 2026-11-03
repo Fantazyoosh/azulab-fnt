@@ -232,7 +232,11 @@ resource "azurerm_container_app" "app" {
     # The CD pipeline owns the running image; Terraform owns everything else.
     # Without this, every `terraform plan` after a deploy proposes a downgrade
     # to whatever tag happens to sit in variables or tfvars.
-    ignore_changes = [template[0].container[0].image]
+    #
+    # Easy Auth stores its client secret as a Container App secret, created by
+    # scripts/setup-easy-auth.sh. Terraform does not own credentials, so it must
+    # not try to delete that block on every plan.
+    ignore_changes = [template[0].container[0].image, secret]
   }
 }
 
