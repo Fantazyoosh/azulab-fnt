@@ -13,6 +13,7 @@ const { SecretClient } = require("@azure/keyvault-secrets");
 const { BlobServiceClient } = require("@azure/storage-blob");
 const crypto = require("node:crypto");
 const express = require("express");
+const pkg = require("../package.json");
 
 const { getConfig } = require("./config");
 const { createLogger } = require("./logger");
@@ -32,7 +33,51 @@ function createState(cfg) {
     secretError: null,
     ready: false,
     shuttingDown: false,
+    // Readiness is a *runtime* signal: the pod can be alive but unable to serve
+    // traffic (dependency down, or an operator forcing it out of rotation).
+    failReadiness: false,
+    storageOk: null,
+    storageCheckedAt: 0,
+    storageFailures: 0,
+    startedAt: new Date().toISOString(),
   };
+}
+
+// Identity of the process as seen by the orchestrator. In Kubernetes these come
+// from the downward API (HOSTNAME is the pod name by default); locally they are
+// "unknown" and that is fine.
+function runtimeInfo(state) {
+  return {
+    service: "azulab",
+    version: process.env.APP_VERSION || pkg.version,
+    pod: process.env.HOSTNAME || "unknown",
+    node: process.env.NODE_NAME || "unknown",
+    namespace: process.env.POD_NAMESPACE || "unknown",
+    image: process.env.APP_IMAGE || "unknown",
+    startedAt: state.startedAt,
+    now: new Date().toISOString(),
+  };
+}
+
+// Bounded dependency check for the readiness probe. A probe must never hang:
+// if Storage does not answer within the timeout, the pod is "not ready", not
+// "stuck". Results are cached briefly so a 2s probe interval cannot hammer
+// the Storage account (and burn request quota).
+async function checkStorage(cfg) {
+  if (!cfg.storageAccountUrl) return "not_configured";
+  let timer;
+  try {
+    const { container } = getBlobClient(cfg);
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("storage check timed out")), 2000);
+    });
+    await Promise.race([container.exists(), timeout]);
+    return "ok";
+  } catch (_err) {
+    return "error";
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function loadSecret(cfg, logger, state) {
@@ -61,6 +106,21 @@ function blobNameValid(name) {
   return typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name);
 }
 
+// Key Vault is a network dependency that can be slow at pod start. A single
+// attempt would leave /ready at 503 forever, so retry with capped exponential
+// backoff. Failures are logged but never crash the process.
+async function loadSecretWithRetry(cfg, logger, state, attempts = 5) {
+  for (let i = 0; i < attempts; i += 1) {
+    await loadSecret(cfg, logger, state);
+    if (state.secretLoaded) return state.secretCache;
+    if (i === attempts - 1) break;
+    const delay = Math.min(1000 * 2 ** i, 15000);
+    logger.warn({ attempt: i + 1, delayMs: delay }, "retrying keyvault secret load");
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  return state.secretCache;
+}
+
 function getBlobClient(cfg) {
   const service = new BlobServiceClient(cfg.storageAccountUrl, createCredential(cfg));
   const container = service.getContainerClient(cfg.containerName);
@@ -80,6 +140,9 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     const id = req.get("x-request-id") || crypto.randomUUID();
     req.requestId = id;
     res.setHeader("x-request-id", id);
+    // Lets you prove load balancing with one curl loop: every response tells
+    // you which replica served it.
+    res.setHeader("x-pod-name", process.env.HOSTNAME || "local");
     next();
   });
 
@@ -108,17 +171,51 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
 
+  app.get("/version", (_req, res) => {
+    res.status(200).json(runtimeInfo(state));
+  });
+
   app.get("/ready", async (_req, res) => {
     if (state.shuttingDown) {
       return res.status(503).json({ status: "shutting_down" });
     }
+    if (state.failReadiness) {
+      // Deliberate failure used to demonstrate that Kubernetes removes a pod
+      // from Service endpoints instead of sending users to an error page.
+      return res.status(503).json({ status: "not_ready", checks: { debug: "forced_failure" } });
+    }
+
+    const now = Date.now();
+    if (state.storageCheckedAt === 0 || now - state.storageCheckedAt > 10000) {
+      const result = await checkStorage(cfg);
+      state.storageOk = result;
+      state.storageCheckedAt = now;
+      state.storageFailures = result === "error" ? state.storageFailures + 1 : 0;
+    }
+
     const checks = {
-      config: true,
-      keyVault: cfg.keyVaultUrl ? (state.secretLoaded ? "ok" : "degraded") : "not_configured",
-      storage: cfg.storageAccountUrl ? "configured" : "not_configured",
+      keyVault: cfg.keyVaultUrl ? (state.secretLoaded ? "ok" : "error") : "not_configured",
+      storage: state.storageOk,
+      storageConsecutiveFailures: state.storageFailures,
     };
-    const ok = (cfg.keyVaultUrl && !state.secretLoaded) ? false : true;
+    // One transient failure is not enough to remove a pod from rotation — that
+    // would make the Service flap. Two in a row is a real dependency outage.
+    const storageOk = checks.storage !== "error" || state.storageFailures < 2;
+    const ok = checks.keyVault !== "error" && storageOk;
     res.status(ok ? 200 : 503).json({ status: ok ? "ready" : "not_ready", checks });
+  });
+
+  // Debug endpoint, disabled unless ENABLE_DEBUG_ENDPOINTS=true. It is a lab
+  // affordance, not something you expose in production: anyone who can reach it
+  // could pull every replica out of the load balancer.
+  app.post("/debug/fail-readiness", (req, res) => {
+    if (!cfg.enableDebugEndpoints) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const raw = req.query.value !== undefined ? req.query.value : req.body && req.body.value;
+    state.failReadiness = raw === undefined ? !state.failReadiness : String(raw) === "true";
+    logger.warn({ failReadiness: state.failReadiness }, "readiness override changed");
+    res.status(200).json({ failReadiness: state.failReadiness });
   });
 
   app.get("/api/message", async (_req, res) => {
@@ -250,8 +347,10 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
 
 function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   const state = createState(cfg);
-  // Load secret before reporting ready; failures are recorded but do not crash.
-  loadSecret(cfg, logger, state).catch((e) => logger.error({ err: e.message }, "loadSecret rejected"));
+  // Load the secret before reporting ready. Retries keep a slow Key Vault from
+  // leaving the pod permanently unready; a hard failure still degrades rather
+  // than crashes, so the pod stays alive for debugging.
+  loadSecretWithRetry(cfg, logger, state).catch((e) => logger.error({ err: e.message }, "loadSecret rejected"));
   const app = buildApp(cfg, logger, state);
 
   const server = app.listen(cfg.port, () => {
@@ -285,7 +384,7 @@ function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   return server;
 }
 
-module.exports = { buildApp, loadSecret, start, createState, getConfig };
+module.exports = { buildApp, loadSecret, loadSecretWithRetry, start, createState, getConfig };
 
 if (require.main === module) {
   start();

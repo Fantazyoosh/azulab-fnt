@@ -29,6 +29,9 @@ function getConfig(env = process.env) {
     shutdownTimeoutMs,
     logLevel: env.LOG_LEVEL || "info",
     nodeEnv: env.NODE_ENV || "development",
+    // Off by default: a public switch that can drain a replica is a lab tool,
+    // not a production feature.
+    enableDebugEndpoints: env.ENABLE_DEBUG_ENDPOINTS === "true",
   };
 }
 

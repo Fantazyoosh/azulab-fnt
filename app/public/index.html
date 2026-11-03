@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-// la l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: 1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azulab | Cloud Message</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
@@ -31,7 +31,7 @@
                 <p class="text-2xl font-light text-slate-200 tracking-tight">Azulab Cloud Broadcast</p>
             </div>
             <button id="refresh-btn" class="text-xs uppercase tracking-widest text-slate-500 hover:text-white transition-colors duration-300 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-// l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: 9 9 0 0 1 9 0z"/><path d="M21 3v5h-5"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                 Refresh
             </button>
         </div>
@@ -57,6 +57,11 @@
                 Initializing...
             </div>
         </div>
+
+        <!-- Runtime identity: which replica, node and build served this page. -->
+        <div id="runtime-info" class="mt-16 pt-6 border-t border-slate-800 text-[10px] uppercase tracking-widest text-slate-600 mono text-center space-y-1">
+            <div>Loading runtime info...</div>
+        </div>
     </div>
 
     <script>
@@ -81,7 +86,7 @@
                 document.title = data.message;
                 sourceInd.innerText = sourceLabel;
             } catch (err) {
-                msg// la l'url keyvault is a bit’s long so it’s split hereS la l'url keyvault: Display.innerText = "Connection Error";
+                msgDisplay.innerText = "Connection Error";
                 console.error(err);
             }
         }
@@ -107,7 +112,28 @@
         msgInput.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
         refreshBtn.onclick = updateMessage;
 
+        // Runtime identity panel. textContent (not innerHTML) so the values can
+        // never be interpreted as markup, even if an env var is malformed.
+        async function updateRuntimeInfo() {
+            try {
+                const res = await fetch('/version');
+                if (!res.ok) return;
+                const v = await res.json();
+                const el = document.getElementById('runtime-info');
+                el.replaceChildren();
+                [['Pod', v.pod], ['Node', v.node], ['Namespace', v.namespace], ['Version', v.version]]
+                    .forEach(([label, value]) => {
+                        const row = document.createElement('div');
+                        row.textContent = `${label}: ${value}`;
+                        el.appendChild(row);
+                    });
+            } catch (_err) {
+                // Non-fatal: the message area already reports connectivity.
+            }
+        }
+
         updateMessage();
+        updateRuntimeInfo();
         setInterval(updateMessage, 15000);
     </script>
 </body>
