@@ -3,6 +3,10 @@
 Target: 12–15 minutes. Every command has a one-line "what to say" next to it.
 Run from the repository root.
 
+> The dashboard has four tabs — **Overview**, **Architecture**, **Security**,
+> **Delivery**. Keep it open on the AKS URL; the tabs are the visual anchor, the
+> commands below are the proof behind each card.
+
 ---
 
 ## 0. Pre-flight (15 minutes before the call)
