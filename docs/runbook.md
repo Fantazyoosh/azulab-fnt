@@ -59,11 +59,19 @@ kubectl -n azulab set image deploy/azulab azulab=ghcr.io/fantazyoosh/azulab-fnt:
 kubectl -n azulab rollout status deploy/azulab --timeout=240s
 
 # stop / start (cost control)
-kubectl -n azulab delete service azulab   # releases the load balancer
+kubectl -n azulab delete service azulab   # releases the load balancer and its IP
 az aks stop  -g rg-azulab-dev-polandcentral -n aks-azulab-dev
 az aks start -g rg-azulab-dev-polandcentral -n aks-azulab-dev
-kubectl apply -k k8s/                     # recreate the Service after start
+
+# The Deployment survives; only the Service is gone. Recreate ONLY the Service:
+# `kubectl apply -k k8s/` would also reset the image to the baseline tag.
+kubectl apply -f k8s/service.yaml
+kubectl -n azulab get svc azulab -w        # a NEW public IP is assigned
 ```
+
+> While the cluster is stopped, CD fails at the `Deploy to AKS` step. A code
+> merge shows a red pipeline (Container Apps still deploys); docs-only merges are
+> skipped by `paths-ignore`.
 
 ---
 

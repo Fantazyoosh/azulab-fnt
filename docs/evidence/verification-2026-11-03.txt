@@ -1,52 +1,55 @@
 # Azulab — verification evidence
-# Generated: 2026-11-03T15:02:20+01:00
-# Public endpoint: http://172.130.54.138/
+# Generated: 2026-11-03T17:32:14+01:00
+# AKS endpoint: http://74.158.77.185/
+# AKS image: ghcr.io/fantazyoosh/azulab-fnt:dbed82244a6c6457793a74fad70904128a930765
+zsh:6: no matches found: properties.template.containers[0].image
+# ACA image: 
 
 ## Cluster
 $ kubectl get nodes
-NAME                             STATUS   ROLES    AGE   VERSION
-aks-system-32184980-vmss000000   Ready    <none>   46m   v1.36.5
+NAME                             STATUS   ROLES    AGE     VERSION
+aks-system-32184980-vmss000001   Ready    <none>   3m46s   v1.36.5
 
 ## Workload
 $ kubectl -n azulab get deploy,pods,svc,pdb
 NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/azulab   2/2     2            2           41m
+deployment.apps/azulab   2/2     2            2           3h11m
 
 NAME                          READY   STATUS    RESTARTS   AGE
-pod/azulab-5f8bdb8c7d-7nbf8   1/1     Running   0          92s
-pod/azulab-5f8bdb8c7d-k2gwm   1/1     Running   0          82s
+pod/azulab-5c4fd64f56-4hjw6   1/1     Running   0          13m
+pod/azulab-5c4fd64f56-ntj2d   1/1     Running   0          13m
 
-NAME             TYPE           CLUSTER-IP   EXTERNAL-IP      PORT(S)        AGE
-service/azulab   LoadBalancer   10.0.38.79   172.130.54.138   80:32433/TCP   41m
+NAME             TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)        AGE
+service/azulab   LoadBalancer   10.0.98.238   74.158.77.185   80:30246/TCP   118s
 
 NAME                                MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
-poddisruptionbudget.policy/azulab   1               N/A               1                     41m
+poddisruptionbudget.policy/azulab   1               N/A               1                     3h11m
 
-## Ready endpoints (what kube-proxy actually routes to)
-10.244.0.26
-10.244.0.27
+## Ready endpoints
+10.244.0.11
+10.244.0.12
 
-## Application
-$ curl http://172.130.54.138/version
-{"service":"azulab","version":"1c4f897b150a820e5700e6aebdf4cdd63255f57b","pod":"azulab-5f8bdb8c7d-k2gwm","node":"aks-system-32184980-vmss000000","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:1c4f897b150a820e5700e6aebdf4cdd63255f57b","startedAt":"2026-11-03T14:01:01.013Z","now":"2026-11-03T14:02:21.016Z"}
-$ curl http://172.130.54.138/ready
+## Application (AKS)
+$ curl http://74.158.77.185/version
+{"service":"azulab","version":"dbed82244a6c6457793a74fad70904128a930765","pod":"azulab-5c4fd64f56-4hjw6","node":"aks-system-32184980-vmss000001","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:dbed82244a6c6457793a74fad70904128a930765","startedAt":"2026-11-03T16:29:31.699Z","now":"2026-11-03T16:32:14.964Z"}
+$ curl http://74.158.77.185/ready
 {"status":"ready","checks":{"keyVault":"ok","storage":"ok","storageConsecutiveFailures":0}}
-$ curl http://172.130.54.138/api/message
+$ curl http://74.158.77.185/api/message
 {"message":"hello from azulab key vault (Sekret z Vault)","source":"vault"}
 
-## Pod distribution (10 requests through the LoadBalancer)
-      4 azulab-5f8bdb8c7d-7nbf8
-      6 azulab-5f8bdb8c7d-k2gwm
+## Pod distribution (10 requests)
+      5 azulab-5c4fd64f56-4hjw6
+      5 azulab-5c4fd64f56-ntj2d
 
-## Zero-downtime rollout (measured during rehearsal)
-HTTP codes while 'kubectl rollout restart' replaced both replicas:
-     90 200
-total requests: 90, non-2xx: 0
+## Container Apps (Entra login)
+/health        200
+/ready         200
+/              401
+/api/message   401
 
-## Readiness failure with ttl=20
-before : 2 ready endpoints
-during : 1 ready endpoint, one pod Ready=false, /health still 200
-after  : 2 ready endpoints (auto-reset)
+## Zero-downtime (measured during the build)
+rollout restart: 90/90 HTTP 200
+image update:    97/97 HTTP 200
 
 ## Security posture
 {
@@ -55,13 +58,32 @@ after  : 2 ready endpoints (auto-reset)
   "softDeleteDays": 7
 }
 {
+  "blobPublicAccess": false,
   "minTls": "TLS1_2",
   "sharedKeyEnabled": false
 }
-Role         Scope
------------  ----------------------------------------------------------------------------------------------
-Contributor  /subscriptions/f2c06f27-c982-4ecb-b81b-604acd6f52d3/resourceGroups/rg-azulab-dev-polandcentral
+{
+  "blobSoftDelete": {
+    "allowPermanentDelete": false,
+    "days": 7,
+    "enabled": true
+  },
+  "containerSoftDelete": {
+    "allowPermanentDelete": null,
+    "days": 7,
+    "enabled": true
+  },
+  "versioning": true
+}
+pipeline direct role assignments: 0
+user direct Key Vault Administrator assignments: 0
 
-## Diagnostic settings
-diag-azulab-dev-kv
-diag-azulab-dev-blob
+## Groups
+azulab-platform-admins   39625051-0491-4c58-a623-4a3383db88d5
+azulab-deployers         a3bbaa3d-ebed-4ae7-9e86-ad4c27c07797
+azulab-readers           161a0d56-525c-43ef-9603-85d8bff4b7f9
+
+## Budget
+Name               Amount    Grain
+-----------------  --------  -------
+budget-azulab-dev  50.0      Monthly

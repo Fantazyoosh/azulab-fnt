@@ -45,6 +45,10 @@ See **[`docs/aks.md`](docs/aks.md)** for the cluster design,
 
 ## 📂 Documentation Hub (Your Learning Path)
 
+**Start here:**
+- **[Presentation runbook (`docs/presentation.md`)](docs/presentation.md)** — the 15-minute pre-flight, the demo order and the fallbacks.
+- **[Study plan (`docs/study.md`)](docs/study.md)** — five 45-minute sessions, each with a proof command.
+
 If you are new to DevOps, follow this order to understand the project:
 
 1. **[The "How-To" Guide (`docs/runbook.md`)](docs/runbook.md)** 
