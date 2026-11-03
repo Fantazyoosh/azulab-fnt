@@ -14,9 +14,10 @@ that checks a role assignment. There is no password anywhere in the chain.
   - `refs/heads/main`
   - the `production` environment
   - a repository-scoped subject
-- **Role: `Contributor` on `rg-azulab-dev-polandcentral` only.** It used to be
-  subscription-wide; narrowing it means a compromised pipeline can damage one
-  resource group, not the whole subscription.
+- **Role: `Contributor` on `rg-azulab-dev-polandcentral`, held by the
+  `azulab-deployers` group.** The service principal has no direct assignment.
+  It used to be subscription-wide; narrowing it means a compromised pipeline can
+  damage one resource group, not the whole subscription.
 - Audience: `api://AzureADTokenExchange`.
 
 ### Workload → Azure (identity)
@@ -43,14 +44,26 @@ that checks a role assignment. There is no password anywhere in the chain.
 
 ## 2. Role assignments (least privilege)
 
-| Principal | Role | Scope | Why |
-| --- | --- | --- | --- |
-| GitHub OIDC app | `Contributor` | resource group | deploy Container Apps |
-| App managed identity | `Key Vault Secrets User` | the vault | read one secret |
-| App managed identity | `Storage Blob Data Contributor` | the storage account | read/write the message blob |
-| Deploying user | `Key Vault Administrator` | the vault | bootstrap the first secret |
+Assignments are held by **Entra ID security groups**, not by individuals:
 
-No principal has subscription-wide access any more.
+| Principal | Role | Scope | Granted via |
+| --- | --- | --- | --- |
+| `azulab-deployers` | `Contributor` | resource group | group (pipeline SP is a member) |
+| `azulab-platform-admins` | `Key Vault Administrator` | the vault | group (human admin is a member) |
+| `azulab-readers` | `Reader` | resource group | group (empty, onboarding path) |
+| App managed identity | `Key Vault Secrets User` | the vault | direct, runtime identity |
+| App managed identity | `Storage Blob Data Contributor` | the storage account | direct, runtime identity |
+| Deploying user | `Owner` | subscription | direct, break-glass only |
+| Deploying user | `Storage Blob Data Contributor` | Terraform state account | direct, backend access |
+
+The pipeline service principal has **zero direct assignments**: it inherits
+`Contributor` from `azulab-deployers`. Onboarding and offboarding are membership
+changes.
+
+**No automation principal has subscription-wide access.** The only `Owner` is the
+human break-glass account. The tenant has no Entra ID P1/P2, so PIM and
+Conditional Access are not available; the compensating controls are narrow scopes,
+group-based access and a single human `Owner`. See `docs/rbac-matrix.md`.
 
 ---
 

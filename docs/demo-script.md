@@ -50,6 +50,25 @@ Say:
 
 ---
 
+## 2b. "Roles come from groups" (1 min)
+
+```bash
+DEPLOYERS=$(az ad group list --query "[?displayName=='azulab-deployers'].id | [0]" -o tsv)
+SP=$(az ad sp show --id 112c715b-6e39-47d8-bad5-1a5065751990 --query id -o tsv)
+
+echo "direct assignments for the pipeline: $(az role assignment list --assignee "$SP" --all --query 'length(@)' -o tsv)"
+az role assignment list --assignee "$DEPLOYERS" --all -o table
+az ad group member check --group "$DEPLOYERS" --member-id "$SP"
+```
+
+Say:
+
+> The pipeline has zero direct role assignments. It inherits Contributor from the
+> deployers group. Onboarding is a membership change; offboarding is one command.
+> The same pattern covers my vault access through the admins group.
+
+---
+
 ## 3. "No secrets in the cluster" (2 min)
 
 ```bash

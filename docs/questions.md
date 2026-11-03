@@ -213,3 +213,16 @@ Gdzie: `docs/aks.md` (tabela trade-offów)
 Brak HPA, ingressa z TLS, NetworkPolicy, private API server, Azure RBAC for
 Kubernetes i GitOps. Każdy z tych punktów jest świadomą decyzją kosztową, nie
 przeoczeniem — i ma wpisany plan produkcyjny.
+
+## 21. Dlaczego role nadajesz grupom, a nie użytkownikom?
+
+Gdzie: `scripts/setup-entra-groups.sh`, `docs/rbac-matrix.md`
+
+Bo jednostką zmiany jest **członkostwo**, nie uprawnienie. Pipeline nie ma ani
+jednego bezpośredniego assignmentu — dziedziczy `Contributor` z grupy
+`azulab-deployers`. Ja nie mam bezpośredniej roli na sejfie — dziedziczę
+`Key Vault Administrator` z `azulab-platform-admins`. Offboarding to jedno
+`member remove`, a nie szukanie ról po wszystkich zasobach.
+
+Tenant nie ma Entra ID P1/P2, więc nie ma PIM ani Conditional Access. Kompensacja:
+wąskie scope, jeden człowiek z `Owner`, zero uprawnień data-plane dla automatu.

@@ -26,6 +26,18 @@ words and run one command that proves it.
 pipeline identity and for the app identity. Explain why the first one cannot read
 blobs and the second one cannot create resources.
 
+### Entra ID groups (the layer above RBAC)
+
+| Link | What it answers |
+| --- | --- |
+| [Manage groups](https://learn.microsoft.com/en-us/entra/fundamentals/how-to-manage-groups) | create security groups, add and remove members |
+| [Assign Azure roles using the portal](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal) | group-based assignment in practice |
+| [Entra RBAC best practices](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/best-practices) | least privilege, separation of duties |
+
+**Exercise:** `az ad group member check --group azulab-deployers --member-id <sp>`
+returns true, while `az role assignment list --assignee <sp>` is empty. Explain
+both results in one sentence.
+
 ---
 
 ## Evening 2 — Key Vault (lifecycle)

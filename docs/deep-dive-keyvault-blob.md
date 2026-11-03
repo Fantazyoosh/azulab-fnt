@@ -30,7 +30,7 @@ data plane: sekrety i bloby.
 | Private endpoint | brak | — |
 | Diagnostic logs | allLogs + AllMetrics | `az monitor diagnostic-settings list --resource <id>` |
 | Rola aplikacji | `Key Vault Secrets User` | `az role assignment list --assignee 210841c3-...` |
-| Rola człowieka | `Key Vault Administrator` | tylko bootstrap |
+| Rola człowieka | `Key Vault Administrator` (przez grupę `azulab-platform-admins`) | `az role assignment list --assignee <group-id>` |
 
 ## 1.3 Czego nie mamy (i dlaczego)
 
