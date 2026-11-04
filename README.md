@@ -51,6 +51,8 @@ The screenshots below are from the deployed AKS instance:
 
 ![Scaling chapter on AKS](docs/img/scaling.png)
 
+![Availability chapter on AKS](docs/img/availability.png)
+
 ---
 
 ## 🗺️ The big picture
@@ -146,7 +148,8 @@ The image tag is the commit SHA, never `latest`.
 - **[Demo script (`docs/demo-script.md`)](docs/demo-script.md)** — commands and
   "what to say" for each of the eight chapters.
 - **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
-  — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation.
+  — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation,
+  crash continuity.
 
 **Go deeper:**
 
