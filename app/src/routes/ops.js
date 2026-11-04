@@ -52,6 +52,8 @@ function createOpsRouter({ cfg, logger, keys, store, credential }) {
       container: store ? store.container : null,
       keyVault: key ? key.source : "none",
       keyVersion: key ? key.version : null,
+      keyFingerprint: key ? key.fingerprint : null,
+      keyLoadedAt: key ? key.loadedAt : null,
       sealIterations: cfg.sealIterations,
       maxUploadBytes: cfg.maxUploadBytes,
       shareTtlSeconds: cfg.shareTtlSeconds,

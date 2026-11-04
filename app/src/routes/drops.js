@@ -178,6 +178,7 @@ function createDropsRouter({ cfg, logger, store, keys }) {
           seal: record.seal,
           sealedAt: record.sealedAt,
           ms: record.ms,
+          pod: record.pod,
         },
       };
       await store.putMeta(id, updated);

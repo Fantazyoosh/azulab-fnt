@@ -3,335 +3,65 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Azulab — one image, two runtimes. A live view of the Azure lab: AKS, Container Apps, identity, security and delivery.">
-  <title>Azulab — one image, two runtimes</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1526'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%2338bdf8'/%3E%3C/svg%3E">
+  <meta name="description" content="Azulab Drop — upload a file, seal it, share a signed link. A live demo of Blob Storage, RBAC, Key Vault, autoscaling, cost and availability on Azure.">
+  <title>Azulab Drop — upload, seal, share</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1526'/%3E%3Cpath d='M16 6l7 4v9l-7 4-7-4v-9z' fill='none' stroke='%2338bdf8' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='15' r='3' fill='%2338bdf8'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="shell pt-8">
     <div class="flex flex-wrap items-start justify-between gap-5">
-      <div class="max-w-2xl">
+      <div class="max-w-3xl">
         <div class="label">Azulab · cloud native lab</div>
-        <h1 class="mt-2 text-3xl font-light tracking-tight sm:text-4xl">One image. Two runtimes.</h1>
-        <p class="subtle mt-3">
-          The same commit SHA runs on Container Apps and AKS. This page is served by
-          whichever runtime you are talking to — the pod and node below prove it.
+        <h1 class="mt-2 text-3xl font-light tracking-tight sm:text-4xl">Drop it. Seal it. Share it.</h1>
+        <p class="subtle mt-3 max-w-2xl">
+          A small file-sharing app whose real job is to make the platform visible: Blob Storage,
+          managed identity, Key Vault, autoscaling, cost and failure — live, not illustrated.
         </p>
       </div>
       <div class="flex flex-col items-start gap-2 sm:items-end">
         <div class="pill"><span id="runtime-dot" class="dot"></span><span id="runtime-label">checking runtime…</span></div>
         <div class="pill"><span id="ready-dot" class="dot"></span><span id="ready-label">checking readiness…</span></div>
+        <div class="flex flex-wrap gap-2 sm:justify-end">
+          <span id="store-pill" class="badge">store: —</span>
+          <span id="key-pill" class="badge">key: —</span>
+        </div>
       </div>
     </div>
 
-    <nav class="mt-8 flex flex-wrap gap-x-6 border-b border-line" role="tablist" aria-label="Sections">
-      <button class="tab" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true">Overview</button>
-      <button class="tab" role="tab" id="tab-architecture" aria-controls="panel-architecture" aria-selected="false">Architecture</button>
-      <button class="tab" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="false">Security</button>
-      <button class="tab" role="tab" id="tab-delivery" aria-controls="panel-delivery" aria-selected="false">Delivery</button>
+    <div id="env-warning" class="note note-warn mt-5" hidden></div>
+
+    <nav id="tabs" class="mt-8 flex gap-x-5 overflow-x-auto border-b border-line" role="tablist" aria-label="Presentation chapters">
+      <button class="tab" role="tab" id="tab-drop" aria-controls="panel-drop" aria-selected="true"><span class="tab-index">01</span> Drop</button>
+      <button class="tab" role="tab" id="tab-blob" aria-controls="panel-blob" aria-selected="false" tabindex="-1"><span class="tab-index">02</span> Blob</button>
+      <button class="tab" role="tab" id="tab-rbac" aria-controls="panel-rbac" aria-selected="false" tabindex="-1"><span class="tab-index">03</span> RBAC</button>
+      <button class="tab" role="tab" id="tab-vault" aria-controls="panel-vault" aria-selected="false" tabindex="-1"><span class="tab-index">04</span> Key Vault</button>
+      <button class="tab" role="tab" id="tab-scaling" aria-controls="panel-scaling" aria-selected="false" tabindex="-1"><span class="tab-index">05</span> Scaling</button>
+      <button class="tab" role="tab" id="tab-cost" aria-controls="panel-cost" aria-selected="false" tabindex="-1"><span class="tab-index">06</span> Cost</button>
+      <button class="tab" role="tab" id="tab-availability" aria-controls="panel-availability" aria-selected="false" tabindex="-1"><span class="tab-index">07</span> Availability</button>
+      <button class="tab" role="tab" id="tab-delivery" aria-controls="panel-delivery" aria-selected="false" tabindex="-1"><span class="tab-index">08</span> Delivery</button>
     </nav>
   </header>
 
   <main class="shell py-8">
-    <!-- ───────────────────────────── OVERVIEW ───────────────────────────── -->
-    <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" class="space-y-4">
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="card">
-          <div class="label">Pod</div>
-          <div id="pod-value" class="value text-lg break-all">—</div>
-          <div class="subtle mt-2">the replica answering this request</div>
-        </div>
-        <div class="card">
-          <div class="label">Node</div>
-          <div id="node-value" class="value text-lg break-all">—</div>
-          <div class="subtle mt-2">where the pod is scheduled</div>
-        </div>
-        <div class="card">
-          <div class="label">Version</div>
-          <div id="version-value" class="value text-lg break-all">—</div>
-          <div class="subtle mt-2">immutable commit SHA, never <span class="font-mono">latest</span></div>
-        </div>
-        <div class="card">
-          <div class="label">Readiness</div>
-          <div class="mt-3 space-y-2">
-            <div class="flex items-center justify-between gap-3">
-              <span class="stat-label">Key Vault</span>
-              <span class="flex items-center gap-2 font-mono text-[11px] text-paper"><span id="ready-kv-dot" class="dot"></span><span id="ready-kv">—</span></span>
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <span class="stat-label">Blob Storage</span>
-              <span class="flex items-center gap-2 font-mono text-[11px] text-paper"><span id="ready-storage-dot" class="dot"></span><span id="ready-storage">—</span></span>
-            </div>
-          </div>
-          <div class="subtle mt-3">a failing dependency drains traffic; it does not restart the pod</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div class="label">Broadcast message</div>
-            <div id="message-text" class="mt-3 text-2xl font-light leading-tight sm:text-3xl">Loading…</div>
-            <div id="message-source" class="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">—</div>
-          </div>
-        </div>
-        <form id="message-form" class="mt-5 flex flex-col gap-2 sm:flex-row">
-          <input id="message-input" class="input" type="text" autocomplete="off"
-                 placeholder="New message — empty clears it and falls back to Key Vault">
-          <button class="btn btn-primary" type="submit">Update</button>
-        </form>
-      </div>
-
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="card">
-          <div class="flex items-center justify-between">
-            <div class="label">Runtime metrics</div>
-            <span class="font-mono text-[10px] text-muted">refreshes every 5 s</span>
-          </div>
-          <div class="mt-3">
-            <div class="stat"><span class="stat-label">Uptime</span><span id="metric-uptime" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">Requests</span><span id="metric-requests" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">Errors</span><span id="metric-errors" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">p50 / p95 / p99</span><span id="metric-latency" class="stat-value">—</span></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex items-center justify-between gap-3">
-            <div class="label">Load balancing</div>
-            <button id="probe-btn" class="btn" type="button">Probe 10 requests</button>
-          </div>
-          <div id="pod-bars" class="mt-4 space-y-2">
-            <div class="subtle">Run a probe to see which replica served each request.</div>
-          </div>
-          <div class="subtle mt-3">the <span class="font-mono">x-pod-name</span> header is set by the app on every response</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─────────────────────────── ARCHITECTURE ─────────────────────────── -->
-    <section id="panel-architecture" role="tabpanel" aria-labelledby="tab-architecture" class="hidden space-y-4">
-      <div class="card">
-        <div class="label">System map</div>
-        <p class="subtle mt-2">
-          One codebase, one image, two runtimes. Identity is the only path to the data plane.
-        </p>
-        <div class="mt-5 overflow-x-auto">
-          <svg viewBox="0 0 920 400" class="h-auto w-full min-w-[760px]" role="img"
-               aria-label="GitHub builds an image, deploys it to Container Apps and AKS, which use a managed identity to reach Key Vault and Blob Storage; logs go to Log Analytics.">
-            <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8"></path>
-              </marker>
-              <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c8aa5"></path>
-              </marker>
-            </defs>
-
-            <!-- build chain -->
-            <rect x="20" y="40" width="140" height="56" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="90" y="63" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">GitHub main</text>
-            <text x="90" y="81" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">merge → CI</text>
-
-            <rect x="200" y="40" width="110" height="56" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="255" y="63" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">CI</text>
-            <text x="255" y="81" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">test + build</text>
-
-            <rect x="350" y="40" width="140" height="56" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="420" y="63" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">GHCR</text>
-            <text x="420" y="81" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">:commit-sha</text>
-
-            <path d="M160 68 H200" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-            <path d="M310 68 H350" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-            <path d="M490 68 H520 V40 H560" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-            <path d="M490 68 H520 V128 H560" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-
-            <!-- runtimes -->
-            <rect x="560" y="10" width="190" height="60" rx="6" fill="#0d1526" stroke="#38bdf8" stroke-opacity="0.5"></rect>
-            <text x="655" y="35" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">Container Apps</text>
-            <text x="655" y="53" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">serverless · Entra login</text>
-
-            <rect x="560" y="98" width="190" height="60" rx="6" fill="#0d1526" stroke="#38bdf8" stroke-opacity="0.5"></rect>
-            <text x="655" y="123" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">AKS</text>
-            <text x="655" y="141" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">2 pods · public LB</text>
-
-            <!-- identity -->
-            <rect x="560" y="190" width="190" height="60" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="655" y="215" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">Managed identity</text>
-            <text x="655" y="233" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">Workload Identity on AKS</text>
-
-            <path d="M560 40 H535 V220 H560" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-            <path d="M560 128 H535" stroke="#38bdf8" stroke-width="1.5" fill="none"></path>
-
-            <!-- data -->
-            <rect x="330" y="300" width="160" height="60" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="410" y="325" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">Key Vault</text>
-            <text x="410" y="343" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">secret + audit</text>
-
-            <rect x="530" y="300" width="160" height="60" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="610" y="325" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">Blob Storage</text>
-            <text x="610" y="343" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">message · no shared key</text>
-
-            <path d="M600 250 L490 300" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-            <path d="M680 250 L610 300" stroke="#38bdf8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"></path>
-
-            <!-- observability -->
-            <rect x="730" y="300" width="170" height="60" rx="6" fill="#0d1526" stroke="#1e2a44"></rect>
-            <text x="815" y="325" text-anchor="middle" fill="#d6deeb" font-family="ui-monospace, monospace" font-size="12">Log Analytics</text>
-            <text x="815" y="343" text-anchor="middle" fill="#7c8aa5" font-family="ui-monospace, monospace" font-size="10">logs · metrics · audit</text>
-
-            <path d="M690 330 H730" stroke="#7c8aa5" stroke-width="1.2" stroke-dasharray="4 4" fill="none" marker-end="url(#arrow-muted)"></path>
-          </svg>
-        </div>
-      </div>
-
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div class="card">
-          <div class="label">Build</div>
-          <p class="subtle mt-2">Every merge to <span class="font-mono">main</span> runs tests, builds one image and tags it with the full commit SHA. No <span class="font-mono">latest</span>.</p>
-        </div>
-        <div class="card">
-          <div class="label">Artifact</div>
-          <p class="subtle mt-2">GHCR holds one immutable artifact. Both runtimes pull the same tag, so "it works on my machine" is the same machine.</p>
-        </div>
-        <div class="card">
-          <div class="label">Runtimes</div>
-          <p class="subtle mt-2">Container Apps is serverless and scales to zero. AKS is Kubernetes: two replicas, probes, rolling update, a public LoadBalancer.</p>
-        </div>
-        <div class="card">
-          <div class="label">Identity</div>
-          <p class="subtle mt-2">GitHub authenticates with OIDC. The workload authenticates with a managed identity on Container Apps and Workload Identity on AKS.</p>
-        </div>
-        <div class="card">
-          <div class="label">Data</div>
-          <p class="subtle mt-2">Key Vault stores the secret; Blob stores the message. Both are reached through role assignments, never through keys or passwords.</p>
-        </div>
-        <div class="card">
-          <div class="label">Observability</div>
-          <p class="subtle mt-2">Application logs and metrics, plus the Key Vault audit trail, land in one Log Analytics workspace.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ───────────────────────────── SECURITY ───────────────────────────── -->
-    <section id="panel-security" role="tabpanel" aria-labelledby="tab-security" class="hidden space-y-4">
-      <div class="card">
-        <div class="label">The security thread</div>
-        <p class="subtle mt-2">
-          No secret in the pipeline, no key in the storage account, no direct role for the
-          pipeline. One long-lived credential exists — the Easy Auth client secret — and it is
-          a deliberate platform constraint.
-        </p>
-      </div>
-
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="card">
-          <div class="label">Identity · no secrets</div>
-          <p class="subtle mt-2">GitHub uses OIDC; the workload uses a managed identity. On AKS the token is projected by the Workload Identity webhook and exchanged with Entra ID.</p>
-          <code class="proof" id="proof-identity">kubectl -n azulab exec deploy/azulab -- env | grep AZURE_</code>
-          <button class="btn mt-2" data-copy="kubectl -n azulab exec deploy/azulab -- env | grep AZURE_">Copy</button>
-        </div>
-
-        <div class="card">
-          <div class="label">RBAC · membership is the unit</div>
-          <p class="subtle mt-2">The pipeline has zero direct roles; it inherits Contributor from <span class="font-mono">azulab-deployers</span>. Human vault access comes from <span class="font-mono">azulab-platform-admins</span>.</p>
-          <code class="proof">az role assignment list --assignee dce65f63-06be-435b-acc0-b0f6f2d1d751 --all --query "length(@)"</code>
-          <button class="btn mt-2" data-copy="az role assignment list --assignee dce65f63-06be-435b-acc0-b0f6f2d1d751 --all --query &quot;length(@)&quot;">Copy</button>
-        </div>
-
-        <div class="card">
-          <div class="label">Key Vault · lifecycle</div>
-          <p class="subtle mt-2">RBAC only, purge protection on, soft delete 7 days. The secret value is bootstrapped outside Terraform; the vault is managed, the value is not.</p>
-          <code class="proof">az keyvault show -n kv-azulab-dev-6mvarl --query properties.enablePurgeProtection</code>
-          <button class="btn mt-2" data-copy="az keyvault show -n kv-azulab-dev-6mvarl --query properties.enablePurgeProtection">Copy</button>
-        </div>
-
-        <div class="card">
-          <div class="label">Storage · no key</div>
-          <p class="subtle mt-2">Shared key authentication is disabled. The key still exists in ARM, but every data-plane use is rejected — Owner is control plane, not data plane.</p>
-          <code class="proof">az storage blob list --account-name stazulabdev6mvarl --container-name demo --auth-mode login</code>
-          <button class="btn mt-2" data-copy="az storage blob list --account-name stazulabdev6mvarl --container-name demo --auth-mode login">Copy</button>
-        </div>
-
-        <div class="card lg:col-span-2">
-          <div class="label">Audit · who read the secret?</div>
-          <p class="subtle mt-2">Key Vault diagnostic logs go to Log Analytics. The identity claim is the managed identity's object id; the IP is the runtime's egress.</p>
-          <code class="proof">AzureDiagnostics
-| where ResourceType == 'VAULTS'
-| where OperationName in ('SecretGet','SecretList')
-| project TimeGenerated, OperationName, ResultType, CallerIPAddress, identity_claim_oid_g
-| order by TimeGenerated desc
-| take 20</code>
-          <button class="btn mt-2" data-copy="AzureDiagnostics | where ResourceType == 'VAULTS' | where OperationName in ('SecretGet','SecretList') | project TimeGenerated, OperationName, ResultType, CallerIPAddress, identity_claim_oid_g | order by TimeGenerated desc | take 20">Copy</button>
-        </div>
-
-        <div class="card lg:col-span-2">
-          <div class="label">Login · the one long-lived secret</div>
-          <p class="subtle mt-2">Container Apps requires an Entra ID sign-in (Easy Auth). AKS stays public for the orchestration demo. Easy Auth is a confidential client, so one client secret exists — stored in the Container App secret store, never in Git.</p>
-          <code class="proof">curl -s -o /dev/null -w "%{http_code}" https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/</code>
-          <button class="btn mt-2" data-copy="curl -s -o /dev/null -w &quot;%{http_code}&quot; https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/">Copy</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ───────────────────────────── DELIVERY ───────────────────────────── -->
-    <section id="panel-delivery" role="tabpanel" aria-labelledby="tab-delivery" class="hidden space-y-4">
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="card">
-          <div class="label">Pipeline</div>
-          <ol class="mt-3 space-y-3">
-            <li class="flex gap-3"><span class="font-mono text-[10px] text-accent">01</span><span class="subtle"><span class="text-paper">Pull request</span> — lint, unit tests, docker build, terraform validate.</span></li>
-            <li class="flex gap-3"><span class="font-mono text-[10px] text-accent">02</span><span class="subtle"><span class="text-paper">CI on main</span> — tests, build, push <span class="font-mono">ghcr.io/…:&lt;sha&gt;</span>.</span></li>
-            <li class="flex gap-3"><span class="font-mono text-[10px] text-accent">03</span><span class="subtle"><span class="text-paper">CD</span> — same tag to Container Apps and AKS, then smoke both.</span></li>
-            <li class="flex gap-3"><span class="font-mono text-[10px] text-accent">04</span><span class="subtle"><span class="text-paper">Verify</span> — <span class="font-mono">/health</span>, <span class="font-mono">/ready</span>, and <span class="font-mono">401</span> on the protected Container App.</span></li>
-          </ol>
-        </div>
-
-        <div class="card">
-          <div class="label">This artifact</div>
-          <div class="mt-3">
-            <div class="stat"><span class="stat-label">Commit SHA</span><span id="delivery-version" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">Image</span><span id="delivery-image" class="stat-value break-all">—</span></div>
-            <div class="stat"><span class="stat-label">Namespace</span><span id="delivery-namespace" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">Started</span><span id="delivery-started" class="stat-value">—</span></div>
-          </div>
-          <p class="subtle mt-3">The tag is an immutable commit SHA. <span class="font-mono">latest</span> is never used.</p>
-        </div>
-
-        <div class="card">
-          <div class="label">Cost guardrails</div>
-          <div class="mt-3">
-            <div class="stat"><span class="stat-label">AKS node</span><span class="stat-value">~2.21 $/day</span></div>
-            <div class="stat"><span class="stat-label">Load balancer + IP</span><span class="stat-value">~0.72 $/day</span></div>
-            <div class="stat"><span class="stat-label">Container Apps</span><span class="stat-value">scale-to-zero</span></div>
-            <div class="stat"><span class="stat-label">Budget alert</span><span class="stat-value">50 / month</span></div>
-          </div>
-          <p class="subtle mt-3">After the demo: delete the Service, then <span class="font-mono">az aks stop</span>.</p>
-        </div>
-
-        <div class="card">
-          <div class="label">Read more</div>
-          <ul class="mt-3 space-y-2 text-sm">
-            <li><a href="https://github.com/Fantazyoosh/azulab-fnt/blob/main/docs/presentation.md">Presentation runbook</a></li>
-            <li><a href="https://github.com/Fantazyoosh/azulab-fnt/blob/main/docs/study.md">Study plan</a></li>
-            <li><a href="https://github.com/Fantazyoosh/azulab-fnt/blob/main/docs/demo-script.md">Demo script</a></li>
-            <li><a href="https://github.com/Fantazyoosh/azulab-fnt/blob/main/docs/security.md">Security architecture</a></li>
-            <li><a href="https://github.com/Fantazyoosh/azulab-fnt/blob/main/docs/decisions.md">Architecture decisions</a></li>
-          </ul>
-        </div>
-      </div>
-    </section>
+    <section id="panel-drop" role="tabpanel" aria-labelledby="tab-drop"></section>
+    <section id="panel-blob" role="tabpanel" aria-labelledby="tab-blob" hidden></section>
+    <section id="panel-rbac" role="tabpanel" aria-labelledby="tab-rbac" hidden></section>
+    <section id="panel-vault" role="tabpanel" aria-labelledby="tab-vault" hidden></section>
+    <section id="panel-scaling" role="tabpanel" aria-labelledby="tab-scaling" hidden></section>
+    <section id="panel-cost" role="tabpanel" aria-labelledby="tab-cost" hidden></section>
+    <section id="panel-availability" role="tabpanel" aria-labelledby="tab-availability" hidden></section>
+    <section id="panel-delivery" role="tabpanel" aria-labelledby="tab-delivery" hidden></section>
   </main>
 
   <footer class="shell border-t border-line py-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Azulab · one image, two runtimes</span>
+      <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Azulab Drop · one image, two runtimes</span>
       <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Tailwind compiled · no runtime CDN</span>
       <a class="font-mono text-[10px] uppercase tracking-[0.18em]" href="https://github.com/Fantazyoosh/azulab-fnt">Repository</a>
     </div>
   </footer>
 
-  <script src="/app.js" defer></script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>
