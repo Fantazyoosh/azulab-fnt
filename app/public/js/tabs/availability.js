@@ -19,14 +19,14 @@ export default {
     const chaosStatus = el("div", { class: "mt-3" });
 
     const refreshButton = el("button", { class: "btn btn-sm", type: "button", text: "Refresh readiness" });
-    const crashButton = el("button", { class: "btn hover:border-bad hover:text-bad", type: "button", text: "Kill this pod" });
+    const crashButton = el("button", { class: "btn hover:border-bad hover:text-bad", type: "button", text: "Kill this container" });
     const drainButton = el("button", { class: "btn", type: "button", text: "Drain this pod (60 s)" });
 
     const intro = card(
       header(
         "Chapter 07 · Availability",
         "Failure is a feature.",
-        "Kubernetes does not prevent failure; it makes failure boring. The buttons below kill or drain the pod that served this page, then watch what the Service does."
+        "Kubernetes does not prevent failure; it makes failure boring. The buttons below crash or drain the process that served this page, then watch what the Service does."
       )
     );
 
@@ -63,6 +63,7 @@ export default {
         { class: "mt-3 space-y-3" },
         reason("Readiness fails → the pod leaves Service endpoints.", "A dependency outage drains traffic without killing the process, so a Key Vault blip does not restart every pod and turn degradation into an outage."),
         reason("Liveness fails → kubelet restarts the container.", "The liveness probe is /health, which touches nothing external. Only a wedged process triggers it."),
+        reason("Container crash → same pod, new process.", "The kubelet restarts the container in place: the pod name survives, the restart count and startedAt change. The other replica carries traffic while it comes back."),
         reason("Rolling update → maxUnavailable 0.", "A new pod must pass /ready before an old one is removed. The preStop sleep gives kube-proxy time to stop sending requests."),
         reason("Single node → shared fate.", "The PDB protects voluntary disruptions. It cannot protect against losing the only node. Zone redundancy would need a second node and a second availability zone; that cost was declined deliberately.")
       )
@@ -136,7 +137,7 @@ export default {
     });
 
     crashButton.addEventListener("click", async () => {
-      if (!window.confirm("Kill the pod that serves this request? The Deployment will replace it.")) return;
+      if (!window.confirm("Kill the container that serves this request? The kubelet restarts it in the same pod.")) return;
       try {
         await withBusy(
           crashButton,
@@ -146,14 +147,18 @@ export default {
             addEvent(`before: ${before.pod} (${[...beforePods].join(", ") || "no pods"})`);
 
             const started = performance.now();
+            const crashAt = Date.now();
+            let crashedPod = before.pod;
             try {
               const response = await api.debug.crash();
-              addEvent(`crash accepted by ${response.pod}`, "warn");
+              crashedPod = response.pod || crashedPod;
+              addEvent(`crash accepted by ${crashedPod}`, "warn");
             } catch (err) {
               addEvent(`crash request ended without a response: ${describeError(err)}`, "warn");
             }
 
             const failures = [];
+            let restarted = null;
             let replacement = null;
             let firstOther = null;
             const seen = new Set();
@@ -161,6 +166,10 @@ export default {
             for (let i = 0; i < 60; i += 1) {
               await sleep(600);
               const result = await api.probePods(4);
+              // A container restart keeps the pod name but changes the process
+              // start time. /version exposes both, so it distinguishes "the same
+              // pod came back" from "a new pod joined".
+              const current = await api.version().catch(() => null);
               for (const entry of result.pods) {
                 seen.add(entry.pod);
                 if (!beforePods.has(entry.pod) && !replacement) replacement = { pod: entry.pod, at: performance.now() - started };
@@ -169,15 +178,31 @@ export default {
                 firstOther = performance.now() - started;
                 addEvent(`first answer from another pod after ${fmt.ms(Math.round(firstOther))}`, "ok");
               }
+              if (
+                !restarted &&
+                current &&
+                current.pod === crashedPod &&
+                Date.parse(current.startedAt) >= crashAt - 1000
+              ) {
+                restarted = { pod: current.pod, at: performance.now() - started };
+                addEvent(`container restarted in ${restarted.pod} after ${fmt.ms(Math.round(restarted.at))}`, "ok");
+              }
               if (result.ok < result.total) failures.push(result.total - result.ok);
               chaosStatus.replaceChildren(
                 el("span", { class: "label", text: `polling… ${seen.size} pod(s) seen · ${failures.reduce((a, b) => a + b, 0)} failed checks` })
               );
-              if (replacement) break;
+              if (restarted || replacement) break;
             }
 
             const totalFailed = failures.reduce((a, b) => a + b, 0);
-            if (replacement) {
+            if (restarted) {
+              chaosStatus.replaceChildren(
+                note(
+                  `Restarted in place: ${restarted.pod} came back after ${(restarted.at / 1000).toFixed(1)} s. The pod name did not change; the kubelet restarted the container and incremented its restart count. ${totalFailed} health checks failed while the Service converged.`,
+                  totalFailed === 0 ? "ok" : "warn"
+                )
+              );
+            } else if (replacement) {
               addEvent(`replacement ${replacement.pod} ready after ${(replacement.at / 1000).toFixed(1)} s`, "ok");
               chaosStatus.replaceChildren(
                 note(
@@ -186,10 +211,10 @@ export default {
                 )
               );
             } else {
-              addEvent("no replacement observed within 36 s", "bad");
+              addEvent("no restart observed within 36 s", "bad");
               chaosStatus.replaceChildren(
                 note(
-                  "No replacement appeared. On a local run nothing restarts the process; on AKS check the Deployment and the node. This is an honest failure, not a hidden one.",
+                  "No restart appeared. On a local run nothing restarts the process; on AKS check the pod's restart count and the Deployment. This is an honest failure, not a hidden one.",
                   "bad"
                 )
               );
