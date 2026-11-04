@@ -1,7 +1,7 @@
 # Azulab Drop — verification evidence
 # Generated: 2026-11-04T15:56:26Z
 # Build measured: 163458f634141500ee4c69b89e862d2b56892f04
-# Current UI build: 51474b8903c7b7fa3ea5774dc02b002f7f34ef53
+# Current UI build: a415e19eb85d8dec07089b6ccdf97175f2633cfa
 # (later commits change only the Availability crash outcome and screenshots)
 # AKS: http://74.158.77.185/
 # ACA: https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io
@@ -119,6 +119,23 @@ azulab-84fcbf976b-sv8zb   1   true
 
 The pod name survived; the container restarted in place. The other replica served
 every request while it came back. The screenshot is docs/img/availability.png.
+
+## Availability — drain (UI build a415e19)
+
+drain requested on azulab-67d9955776-2zm62 for 60 s
+
+after 11 s:
+  15/20 readiness probes returned 200
+  the drained pod answered 5/5 probes with 503
+  the other 15 requests were served at 200 by the remaining replica
+
+after the 60 s TTL:
+  /ready 200
+  10.244.0.50 ready=true
+  10.244.0.51 ready=true
+
+The drained pod left the ready endpoints and rejoined automatically; the Service
+stayed available throughout.
 
 ## Blob Storage and lifecycle
 
