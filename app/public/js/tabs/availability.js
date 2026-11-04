@@ -256,20 +256,25 @@ export default {
             const result = await api.probeReady(20);
             const seen = result.pods.find((entry) => entry.pod === drained.pod);
             const absent = !seen;
+            const drainedFailed = seen ? seen.failed : 0;
+            const allFailed = result.ok === 0;
+            const drainedOut = absent || (!allFailed && drainedFailed > 0);
             addEvent(
               `after drain: ${result.ok}/${result.total} ready, ${
-                absent ? `${drained.pod} absent from endpoints` : `${drained.pod} still reached ${seen.hits}× (${seen.failed} non-200)`
+                absent ? `${drained.pod} absent from endpoints` : `${drained.pod} answered ${seen.failed} non-200 of ${seen.hits}`
               }`,
-              absent ? "ok" : "warn"
+              drainedOut ? "ok" : "warn"
             );
             chaosStatus.replaceChildren(
               note(
                 absent
                   ? `${drained.pod} is out of rotation; ${result.ok} of ${result.total} readiness requests were served by the remaining replica. It rejoins automatically after the 60 s TTL.`
-                  : seen.failed === seen.hits
+                  : allFailed
                     ? `${drained.pod} answered every readiness request with 503. With one reachable pod (local run or a single replica) there is no second endpoint to take over — readiness is failing, but the Service has nowhere else to send traffic.`
-                    : `${drained.pod} was still reached ${seen.hits} times (${seen.failed} non-200). Endpoint removal is still converging; run the probe again in a few seconds.`,
-                absent ? "ok" : "warn"
+                    : drainedFailed === 0
+                      ? `${drained.pod} was still reached ${seen.hits} times with 200. Endpoint removal is still converging; run the probe again in a few seconds.`
+                      : `${drained.pod} answered ${drainedFailed} of ${seen.hits} readiness requests with 503. The other ${result.ok} requests were served at 200 by the remaining replica. That is readiness working: the pod is out of rotation while the Service stays available. It rejoins after the 60 s TTL.`,
+                drainedOut ? "ok" : "warn"
               )
             );
           },
