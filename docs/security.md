@@ -37,8 +37,10 @@ that checks a role assignment. There is no password anywhere in the chain.
 ### Application-level authentication (Container Apps)
 
 The Container Apps UI is protected by **Easy Auth** with Entra ID: `/health` and
-`/ready` are excluded for probes, every other path requires a session. The client
-secret lives in the Container App secret store, not in Git and not in Terraform.
+`/ready` are excluded for probes, and `/s/*` is excluded because a signed share
+link carries its own HMAC credential. Every other path requires a session. The
+client secret lives in the Container App secret store, not in Git and not in
+Terraform.
 
 This is the **one long-lived credential** in the project, and it is a deliberate
 platform constraint — Easy Auth is a confidential client and has no managed
@@ -121,11 +123,10 @@ A control you cannot audit is not a control. Diagnostic settings send:
 
 - Key Vault: all logs + all metrics → `law-azulab-dev`
 - Blob service: `StorageWrite` and `StorageDelete` → `law-azulab-dev`
-- AKS control plane: `kube-audit-admin` (mutating requests) and
-  `cluster-autoscaler` → `law-azulab-dev`
+- AKS control plane: `kube-audit-admin` (mutating requests) → `law-azulab-dev`
 - Container Apps: the environment forwards console logs to the same workspace
 
-`StorageRead` is intentionally excluded: every message read would be logged, which
+`StorageRead` is intentionally excluded: every drop read would be logged, which
 adds cost without adding signal in this lab. `kube-audit` (all reads) is excluded
 for the same reason — `kube-audit-admin` answers "who changed what".
 

@@ -1,0 +1,123 @@
+# Azulab Drop — verification evidence
+# Generated: 2026-11-04T15:56:26Z
+# Build: 163458f634141500ee4c69b89e862d2b56892f04
+# AKS: http://74.158.77.185/
+# ACA: https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io
+
+## Artifact and readiness
+
+$ curl -s http://74.158.77.185/version
+{"service":"azulab","version":"163458f634141500ee4c69b89e862d2b56892f04","pod":"azulab-56cd75fbc6-nrxqf","node":"aks-system-32184980-vmss000001","namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:163458f634141500ee4c69b89e862d2b56892f04","startedAt":"2026-11-04T15:31:45.648Z","now":"2026-11-04T15:56:26.101Z"}
+
+$ curl -s http://74.158.77.185/ready
+{"status":"ready","checks":{"keyVault":"ok","signingKey":"c7136de0e3414175ac785fe505e8d43a","storage":"ok","storageConsecutiveFailures":0}}
+
+$ az containerapp show -g rg-azulab-dev-polandcentral -n ca-azulab-dev \
+    --query properties.template.containers[0].image -o tsv
+ghcr.io/fantazyoosh/azulab-fnt:163458f634141500ee4c69b89e862d2b56892f04
+
+$ curl -s https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/ready
+{"status":"ready","checks":{"keyVault":"ok","signingKey":"c7136de0e3414175ac785fe505e8d43a","storage":"ok","storageConsecutiveFailures":0}}
+
+## Cross-runtime signed link
+
+drop: osoewiUGaelk (azulab-interview-pack.md)
+share key version: c7136de0e3414175ac785fe505e8d43a
+share expires: 2026-11-04T16:56:25.000Z
+signature covers: id . exp . keyVersion
+
+AKS download: 200  b793a90cf87ada88442f6b8e7439a8e810a9b460b475b402ff36a06a9d757705
+ACA download: 200  b793a90cf87ada88442f6b8e7439a8e810a9b460b475b402ff36a06a9d757705
+
+tampered signature (sig changed): 403
+expired link (exp=1):              410
+
+The same signed URL returns byte-identical content from both runtimes, without
+a session. Easy Auth protects the Container App root but excludes /s/*.
+
+## Easy Auth
+
+$ az containerapp auth show ... --query globalValidation.excludedPaths -o tsv
+/health
+/ready
+/s/*
+
+/            401  (Entra login required)
+/s/abc       400  (request reaches the app; malformed link)
+/s/abc/def   404  (request reaches the app; no such route)
+
+## Autoscaling
+
+$ kubectl -n azulab get hpa azulab
+NAME     REFERENCE           TARGETS        MINPODS   MAXPODS   REPLICAS
+azulab   Deployment/azulab   cpu: 7%/60%    2         6         2
+
+UI load (parallel seals), observed every 15 s:
+
+15:13:21   cpu: 7%/60%    replicas=2
+15:13:52   cpu: 78%/60%   replicas=3
+15:14:07   cpu: 78%/60%   replicas=3
+15:14:53   cpu: 9%/60%    replicas=3
+15:15:35   cpu: n/a       replicas=3
+
+Sustained CPU burn inside one pod (90 s):
+
+15:15:35   burn starts
+15:17:06   replicas=6
+15:17:21   replicas=6
+15:18:07   replicas=6
+15:19:24   replicas=6
+15:19:55   replicas=2
+
+The HPA reached the configured ceiling (6) and returned to the floor (2).
+The node is a single 2-vCPU Standard_D2as_v5; the HPA adds pods, the node is
+the ceiling.
+
+## Key rotation and bounded revocation
+
+All three versions exist and are enabled at the end of the test:
+
+63078ddfcb104b8e9396acf135c62371  enabled  created 14:37:28Z  (V1)
+e4b8e1c020ce4c5aa1929f9cab3078fa  enabled  created 15:24:53Z  (V2)
+c7136de0e3414175ac785fe505e8d43a  enabled  created 15:25:38Z  (V3, current)
+
+Rotation:
+- A link signed with V2 was still 200 after V3 became current.
+- A new share returned V3 and worked.
+- Pods were restarted: the V2 link still returned 200 with a cold cache.
+
+Revocation (deterministic, one pod via kubectl port-forward):
+
+  warm V2 link                     200
+  az keyvault secret set-attributes --version <V2> --enabled false
+  t+0 .. t+58, every 2 s           200  (28 samples)
+  t+61                             403  {"error":"key_unavailable"}
+
+The version cache re-checks Key Vault at most every 60 s, so revocation is
+bounded rather than instant. The V3 link stayed 200 throughout. V2 was
+re-enabled and the old link returned 200 again.
+
+## Blob Storage and lifecycle
+
+$ az storage container list --account-name stazulabdev6mvarl --auth-mode login
+demo
+drops
+
+$ az storage account management-policy show ... | jq ...
+{"name":"drops-retention","enabled":true,"prefix":["drops/"],"cool":30.0,"delete":90.0}
+
+Container layout:
+
+drops/<id>/file       bytes exactly as uploaded
+drops/<id>/meta.json  name, size, content-type, sha256, pod, timestamps
+drops/<id>/seal.json  algorithm, iterations, digest, seal
+
+Shared key authentication is disabled; the app uses its managed identity.
+
+## Quality gates
+
+npm test          40/40 pass
+npm run lint      pass
+terraform plan    No changes (exit 0)
+CI on main        success for 163458f
+CD                success for 163458f on ACA and AKS

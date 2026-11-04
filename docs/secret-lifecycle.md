@@ -1,85 +1,125 @@
 # Secret lifecycle
 
-There are two kinds of "secret" in this project, and neither is stored where an
-attacker would look first.
+There are three kinds of secret in this project. Only one of them is a
+long-lived credential, and it belongs to the platform, not to the application.
 
-| Secret | Where it lives | Who can read it |
+| Secret | Where it lives | Who can touch it |
 | --- | --- | --- |
-| Application message | Azure Key Vault (`app-message`) | the app identity, via RBAC |
+| **Share signing key** | Key Vault (`share-signing-key`), versioned | runtime identity reads; admins rotate and disable versions |
+| Legacy app message | Key Vault (`app-message`) | runtime identity reads |
 | Azure credentials | **nowhere** | nobody — they do not exist |
+| Easy Auth client secret | Container App secret store | the platform; rotated yearly |
 
 ---
 
-## 1. The application secret
+## 1. The share signing key
+
+Every share link is an HMAC over `id`, expiry and key version. The key is a
+versioned Key Vault secret; its value is never written to disk, never returned by
+the API and never rendered in the UI. The API exposes only the version and a
+fingerprint.
 
 ### Bootstrap (once, outside Terraform)
-
-Terraform used to own the secret *value*, which meant a secret in Git. It no
-longer does: the resource was removed from state with
-`removed { lifecycle { destroy = false } }`, so the value stayed in Key Vault
-while Terraform forgot about it.
 
 ```bash
 az keyvault secret set \
   --vault-name kv-azulab-dev-6mvarl \
-  --name app-message \
-  --value "hello from azulab key vault"
+  --name share-signing-key \
+  --value "$(openssl rand -base64 48)"
 ```
 
-### Read at startup
+Terraform owns the vault, the role assignment and the diagnostic settings. It
+does not own secret values: a value in Terraform state is a secret in Git.
 
-1. The pod starts with `KEY_VAULT_URL` and `SECRET_NAME` in its environment.
-2. It builds a credential:
-   - Container Apps: the managed identity attached to the app.
-   - AKS: `WorkloadIdentityCredential` using the projected token.
-3. `SecretClient.getSecret()` returns the value.
-4. The value is cached **in memory** for the life of the process.
-5. `/ready` reports `keyVault: "ok"` only after the secret is loaded.
+### Read at runtime
+
+1. The pod authenticates with its managed identity (Container Apps) or
+   `WorkloadIdentityCredential` (AKS).
+2. `SecretClient.getSecret(name, { version })` reads the exact version named in
+   the link.
+3. The current version is cached for **5 minutes**; every version is re-checked
+   at most once every **60 seconds**.
+4. `/ready` reports `keyVault: "ok"` and the version currently in use. A missing
+   key makes readiness fail; the probe triggers a background refresh instead of
+   blocking on Key Vault.
+
+The UI in the **Key Vault** chapter shows:
+
+- the secret name, never the value;
+- the version and a short fingerprint;
+- the current-version TTL and the version re-check bound.
+
+### Rotation
+
+```bash
+NEW=$(openssl rand -base64 48)
+az keyvault secret set \
+  --vault-name kv-azulab-dev-6mvarl \
+  --name share-signing-key \
+  --value "$NEW"
+unset NEW
+```
+
+This creates a new version. No redeploy is required:
+
+- **new** shares use the new version within the 5-minute current-version TTL (or
+  immediately after a pod restart);
+- **old** links keep working because the URL names the version they were signed
+  with;
+- the old version stays available until it is disabled or deleted.
+
+### Revocation
+
+```bash
+az keyvault secret set-attributes \
+  --vault-name kv-azulab-dev-6mvarl \
+  --name share-signing-key \
+  --version <old-version> --enabled false
+```
+
+A disabled (or deleted) version answers `403`/`404`. The cache entry is dropped,
+and every link carrying that version stops verifying. Because a cached version is
+re-checked at most every 60 seconds, revocation is **bounded**, not instant.
+
+Measured: `docs/evidence/verification-2026-11-04.txt` — the same pod answered
+`200` for 58 seconds after the disable, then `403 key_unavailable` at t+61s.
+Re-enabling the version restored the link.
 
 ### Failure handling
 
 | Failure | Behaviour |
 | --- | --- |
-| Key Vault slow at startup | retry 5 times, backoff 1→16 s |
-| Key Vault unreachable | process stays alive, `/ready` = 503, `/health` = 200 |
-| Secret missing | same as unreachable; the error is logged with the vault name |
+| Key Vault slow at startup | signing key loads lazily; `/ready` reports `pending` and retries in the background |
+| Key Vault unreachable later | the cached key keeps working, marked `stale` — an outage must not mass-revoke valid links |
+| Version disabled or deleted | `403`/`404`, cache entry dropped, the version's links fail |
+| Secret missing at boot | `/ready` = 503; the process stays alive and `/health` = 200 |
 | Storage unreachable | `/ready` = 503 after two consecutive failures (flap protection) |
 
-The last two rows are the reason liveness never checks dependencies: a dependency
-outage must drain traffic, not restart every replica.
-
-### Rotation
-
-```bash
-az keyvault secret set --vault-name kv-azulab-dev-6mvarl \
-  --name app-message --value "new value"
-
-kubectl -n azulab rollout restart deploy/azulab
-az containerapp revision restart -g rg-azulab-dev-polandcentral -n ca-azulab-dev \
-  --revision "$(az containerapp show -g rg-azulab-dev-polandcentral -n ca-azulab-dev \
-  --query properties.latestRevisionName -o tsv)"
-```
-
-**Known limitation:** the app reads the secret once at startup and caches it. It
-does not watch Key Vault for new versions. A production system would either
-restart on rotation (above) or use a short TTL cache with background refresh.
-
-### Why the secret is not in Kubernetes
-
-There is no `Secret` object in the `azulab` namespace. A Kubernetes Secret is
-base64, not encryption, and it is readable by anyone with `get secrets` in the
-namespace. Workload Identity removes the object entirely: the pod asks Entra ID
-for a token, and Entra ID checks the federated credential.
+The last rows are why liveness never checks dependencies: a dependency outage
+must drain traffic, not restart every replica.
 
 ---
 
-## 2. The credentials that do not exist
+## 2. The legacy message secret
+
+The original demo had a single `app-message` secret. The endpoint still exists,
+but it is not part of the Drop product flow.
+
+- It is read once at startup with five attempts and capped exponential backoff.
+- It is cached for the life of the process.
+- Rotating it requires a rollout restart, because the old code does not watch
+  Key Vault. This is exactly the limitation the signing key was designed to
+  avoid: the signing key is versioned, re-checked and revocable online.
+
+---
+
+## 3. Credentials that do not exist
 
 ### GitHub Actions → Azure
 
 - No `AZURE_CLIENT_SECRET` in GitHub.
 - Each workflow job gets a short-lived OIDC token from GitHub.
-- Azure exchanges it for an access token, after validating:
+- Azure exchanges it for an access token after validating:
   - issuer: `token.actions.githubusercontent.com`
   - subject: `repo:Fantazyoosh/azulab-fnt:ref:refs/heads/main` (or the
     `production` environment)
@@ -99,16 +139,26 @@ expires quickly. There is no long-lived credential to steal.
 
 ---
 
-## 3. What an attacker would find
+## 4. The one long-lived credential
+
+Container Apps Easy Auth is a confidential client: it needs a client secret or a
+certificate. The secret is stored in the Container App secret store, not in Git
+and not in Terraform, and it rotates yearly. This is a platform constraint, not
+an application choice; AKS has no equivalent because it has no ingress auth.
+
+---
+
+## 5. What an attacker would find
 
 | Target | Result |
 | --- | --- |
-| Git repository | no secret values (the value was removed from Terraform) |
+| Git repository | no secret values (Terraform does not own them) |
 | Container image | no credentials baked in |
 | Kubernetes API | no Secret objects |
 | Pod filesystem | a projected token file, valid briefly, audience-bound |
 | Storage account | shared key authentication disabled — a stolen key cannot authenticate |
-| Key Vault | needs an Entra token with `Key Vault Secrets User` |
+| Key Vault | needs an Entra token with `Key Vault Secrets User`; the runtime cannot administer the vault |
+| Share link | a signature bound to one drop, one expiry and one key version |
 
 The weakest point is the human with `Owner`, which is why the pipeline identity
-was narrowed to a single resource group.
+was narrowed to a single resource group and the runtime has no data-plane key.

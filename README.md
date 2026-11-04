@@ -1,123 +1,188 @@
-# 🚀 Azulab — Modern Cloud Native Bootstrap
+# 🚀 Azulab Drop — upload, seal, share
 
-> **The "Learning by Doing" Project**
-> This repository is a comprehensive laboratory designed to demonstrate the bridge between simple code and **Enterprise-grade Cloud Infrastructure**. It implements the gold standards of modern DevOps: **Security-First, Infrastructure-as-Code, and Zero-Touch Deployment.**
+> A working file-sharing application whose real job is to make the platform
+> visible: Blob Storage, managed identity, Key Vault, autoscaling, cost and
+> failure — live, not illustrated.
 
----
-
-## 🌟 What is Azulab?
-
-At its core, Azulab is a simple "Broadcast Message" app. However, the *real* project is the **ecosystem around it**. 
-
-Imagine you are building a system for a bank or a large e-commerce site. You cannot just "upload files via FTP". You need security, audit logs, and the ability to revert a mistake in seconds. **That is exactly what Azulab demonstrates.**
-
-### 🗺️ The Big Picture (Data Flow)
-`User` $\rightarrow$ `GitHub PR` $\rightarrow$ `CI/CD Pipeline (OIDC)` $\rightarrow$ `GHCR image` $\rightarrow$ `Azure Container Apps` **or** `AKS` $\rightarrow$ `Managed Identity` $\rightarrow$ `Key Vault / Blob Storage`
-
-The same image runs on two runtimes:
-
-| Runtime | Role |
-| :--- | :--- |
-| **Azure Container Apps** | serverless, scale-to-zero, **requires Entra ID login** (Easy Auth) |
-| **Azure Kubernetes Service** | orchestrated containers — public demo, zero-downtime |
-
-Both use the same managed identity, so the application never knows where it runs.
-See **[`docs/aks.md`](docs/aks.md)** for the cluster design,
-**[`docs/entra-login.md`](docs/entra-login.md)** for the login flow and
-**[`docs/demo-script.md`](docs/demo-script.md)** for the walkthrough.
+Azulab is a small product with a deliberately serious backend. You upload a file,
+the app stores it in a private Blob container, computes a slow cryptographic seal,
+and signs a share link that expires. There is no account, no session and no shared
+key. Every chapter of the UI then explains one Azure mechanism behind that flow.
 
 ---
 
-## 🛠️ The "Pro" Tech Stack (And why it matters)
+## 🌟 What it does
 
-| Technology | Role | Why this instead of the "easy" way? |
-| :--- | :--- | :--- |
-| **Terraform** | Infrastructure as Code | To avoid "clicking in the portal". Infrastructure is versioned and reproducible. |
-| **OIDC** | Trust Federation | No more stored passwords/secrets in GitHub. Azure trusts GitHub's identity. |
-| **Managed Identity** | Zero-Trust Auth | The app doesn't "log in" with a password; it *is* the identity. No secrets to leak. |
-| **Workload Identity** | Pod-level Azure auth | Kubernetes projects a short-lived token; there is no Secret object in the cluster. |
-| **Azure Container Apps** | Serverless Compute | Scale-to-zero saves money; Revision Management allows instant rollbacks. |
-| **Azure Kubernetes Service** | Orchestrated Compute | Probes, rolling updates, PDB and Service endpoints — the real Kubernetes surface. |
-| **Key Vault** | Secret Management | Secrets are encrypted and audited, not stored in `.env` files. |
-| **Blob Storage** | Dynamic State | Allows updating the app's message without rebuilding or restarting the container. |
+1. **Upload** — raw bytes go to Blob Storage under a random id. The original
+   filename stays metadata; the blob name is always `file`, so user input never
+   reaches a path.
+2. **Seal** — SHA-256 digest plus a PBKDF2-SHA256 work factor (600,000
+   iterations). The seal is deliberately expensive to recompute; it runs on the
+   libuv threadpool, so the Node event loop keeps answering.
+3. **Share** — HMAC-SHA256 over `id`, expiry and key version. The key lives in
+   Key Vault; the URL carries the version, so rotation does not break old links.
+   Disabling a version revokes its links within a bounded 60 seconds.
 
----
-
-### 🖥️ The dashboard
-
-The application is a four-tab dashboard: **Overview** (live pod, node, version and
-readiness), **Architecture** (the system map), **Security** (identity, RBAC, Key
-Vault, storage and audit) and **Delivery** (pipeline and cost). The tabs are the
-presentation; the backend is unchanged.
-
-![Azulab dashboard on AKS](docs/img/aks-ui.png)
+Uploads are capped at 5 MB; links last 5, 15 or 60 minutes. The deployed app uses
+the `drops` container in Blob Storage. `DROP_STORE=memory` is an explicit local-dev
+mode and the UI labels it as such.
 
 ---
 
-## 📂 Documentation Hub (Your Learning Path)
+## 🧭 The eight chapters (the presentation agenda)
 
-**Start here:**
-- **[Presentation runbook (`docs/presentation.md`)](docs/presentation.md)** — the 15-minute pre-flight, the demo order and the fallbacks.
-- **[Study plan (`docs/study.md`)](docs/study.md)** — five 45-minute sessions, each with a proof command.
+The UI is the presentation. Each tab makes one claim and proves it with live data
+from the process answering the request.
 
-If you are new to DevOps, follow this order to understand the project:
+| # | Chapter | The claim | What proves it | Azure mechanism |
+| --- | --- | --- | --- | --- |
+| 01 | **Drop** | Upload, seal, share — the product works. | A real file, a seal time, a signed URL, a download. | Blob Storage + HMAC key in Key Vault |
+| 02 | **Blob** | Storage without a key. | Live object/version counts, bulk writes, soft-delete round trip. | Private container, shared key auth disabled, managed identity |
+| 03 | **RBAC** | Identity, not keys. | Token claims + three probes: read secret 200, list blobs 200, list account keys 403. | Workload Identity, narrow roles on narrow scopes |
+| 04 | **Key Vault** | The key never leaves the vault. | Version and fingerprint only; rotate and revoke commands. | Versioned secret, 5-minute current TTL, 60-second version re-check |
+| 05 | **Scaling** | Real CPU, real replicas. | Per-pod seal distribution, HPA 2 → 6, CPU target 60%. | HPA on AKS, requests 100m / limits 300m |
+| 06 | **Cost** | Small by design. | The bill, the levers, the lifecycle bound. | One node, one LB, ACA scale-to-zero, Cool 30 d / delete 90 d |
+| 07 | **Availability** | Failure is a feature. | Crash and drain buttons; readiness drops a pod from endpoints. | Readiness vs liveness, PDB, maxUnavailable 0 |
+| 08 | **Delivery** | One image. Two runtimes. | Commit SHA, image tag, pod; AKS and ACA side by side. | GitHub Actions, OIDC, GHCR, immutable SHA tags |
 
-1. **[The "How-To" Guide (`docs/runbook.md`)](docs/runbook.md)** 
-   $\rightarrow$ *Learn the operational lifecycle: from code change to smoke test.*
-2. **[The Security Blueprint (`docs/security.md`)](docs/security.md)** 
-   $\rightarrow$ *Understand why "Zero-Trust" is the industry standard and how OIDC works.*
-3. **[The Architect's Q&A (`docs/questions.md`)](docs/questions.md)** 
-   $\rightarrow$ *The most important part for interviews. Learn how to justify technical decisions.*
-4. **[The Incident Log (`docs/rollback-log.md`)](docs/rollback-log.md)** 
-   $\rightarrow$ *See how real-world failures are handled and recovered.*
-5. **[The AKS Runtime (`docs/aks.md`)](docs/aks.md)** 
-   $\rightarrow$ *Cluster design, Workload Identity, probes and cost.*
-6. **[The Demo Script (`docs/demo-script.md`)](docs/demo-script.md)** 
-   $\rightarrow$ *Twelve minutes, ten commands, zero improvisation.*
-7. **[The RBAC Matrix (`docs/rbac-matrix.md`)](docs/rbac-matrix.md)** 
-   $\rightarrow$ *Who can do what, on which scope, and why the blast radius is small.*
-8. **[The Secret Lifecycle (`docs/secret-lifecycle.md`)](docs/secret-lifecycle.md)** 
-   $\rightarrow$ *Where the secret lives, how it is read, and what an attacker would find.*
-9. **[Architecture Decisions (`docs/decisions.md`)](docs/decisions.md)** 
-   $\rightarrow$ *Twelve trade-offs, each with its cost written down.*
-10. **[The Drill (`docs/drill-rbac-kv.md`)](docs/drill-rbac-kv.md)** 
-    $\rightarrow$ *RBAC, security and Key Vault — answer out loud, then check.*
-11. **[Deep dive: Key Vault + Blob (`docs/deep-dive-keyvault-blob.md`)](docs/deep-dive-keyvault-blob.md)** 
-    $\rightarrow$ *The two components, layer by layer, with labs and audit proofs.*
-12. **[References (`docs/references.md`)](docs/references.md)** 
-    $\rightarrow$ *The official Microsoft Learn reading list for RBAC, Key Vault, Blob and WAF.*
-13. **[Entra ID login (`docs/entra-login.md`)](docs/entra-login.md)** 
-    $\rightarrow$ *Easy Auth on Container Apps: the flow, the secret trade-off, how to disable it.*
+The screenshots below are from the deployed AKS instance:
+
+![Drop chapter on AKS](docs/img/drop.png)
+
+![Scaling chapter on AKS](docs/img/scaling.png)
 
 ---
 
-## 🚀 Quick Start
+## 🗺️ The big picture
 
-### 💻 Local Run (The "Developer" Experience)
+```text
+GitHub main
+   │  pull request → lint, tests, docker build, terraform validate
+   ▼
+CI on main ──► ghcr.io/fantazyoosh/azulab-fnt:<commit-sha>
+   │
+   ├──────────────► AKS  (HPA 2–6, public LoadBalancer, no ingress auth)
+   │                   │
+   └──────────────► ACA  (Easy Auth / Entra ID, scale 0–2)
+                       │
+                       ▼
+              managed identity / Workload Identity
+                       │
+          ┌────────────┴────────────┐
+          ▼                         ▼
+     Key Vault                  Blob Storage
+  signing key, audit          drops/, no shared key
+          │                         │
+          └────────────┬────────────┘
+                       ▼
+                 Log Analytics
+```
+
+The same image runs on both runtimes. AKS demonstrates Kubernetes primitives
+(probes, PDB, HPA, rolling updates); Container Apps demonstrates managed ingress
+with Entra ID. Signed links work on both because `/s/*` stays anonymous while
+everything else on ACA requires a session.
+
+---
+
+## 🛠️ The stack, and why it is not the easy way
+
+| Technology | Role | Why this instead of the easy path? |
+| --- | --- | --- |
+| **Terraform** | Infrastructure as Code | Reproducible infrastructure, reviewed like code. |
+| **OIDC** | GitHub → Azure federation | No stored cloud passwords in GitHub. |
+| **Managed Identity** | Runtime authentication | The app *is* the identity; there is no secret to leak. |
+| **Workload Identity** | Pod-level Azure auth | Short-lived projected token; no Kubernetes Secret. |
+| **Azure Kubernetes Service** | Orchestrated compute | Probes, PDB, HPA and rolling updates on a real cluster. |
+| **Azure Container Apps** | Managed runtime | Easy Auth with Entra ID and scale-to-zero. |
+| **Key Vault** | Signing key | Versioned, audited, never rendered in the UI. |
+| **Blob Storage** | Drop content | Private container, shared key disabled, lifecycle policy. |
+| **Log Analytics** | Audit and diagnostics | Key Vault and Blob access is answerable, not guessed. |
+
+---
+
+## 🚀 Quick start
+
+### Local run (developer experience)
+
 ```bash
 cd app
 npm install
-npm start
+DROP_STORE=memory npm start
 ```
-Visit `http://localhost:8080` to see the UI.
 
-The dashboard uses Tailwind CSS compiled to a single `public/styles.css` (no runtime
-CDN). After changing classes, rebuild it:
+Open `http://localhost:8080`. The memory store is explicit and ephemeral: drops
+disappear when the process restarts, and the signing key is generated per process.
+The UI shows a warning banner in this mode.
+
+Without `DROP_STORE=memory` the app has no storage account configured and the Drop
+chapter returns `503`; that is deliberate, not a missing default.
+
+The UI uses Tailwind CSS compiled to a single `public/styles.css` (no runtime CDN).
+After changing classes, rebuild it:
 
 ```bash
 npm run build:css
 ```
 
-### ☁️ Cloud Deploy (The "DevOps" Experience)
-1. Create a branch $\rightarrow$ `git checkout -b feat/my-feature`
-2. Push changes $\rightarrow$ `git push origin feat/my-feature`
-3. Open a **Pull Request** $\rightarrow$ Watch the pipeline validate your code.
-4. **Merge** $\rightarrow$ Watch Azure deploy the new version automatically.
+### Cloud deploy (the DevOps experience)
+
+1. Create a branch: `git checkout -b feat/my-feature`
+2. Push and open a **Pull Request** — lint, tests, image build and Terraform
+   validation run, but no image is published.
+3. **Merge** — CI publishes `ghcr.io/…:<commit-sha>`, CD deploys the same tag to
+   Container Apps and AKS, then smoke-tests both.
+
+The image tag is the commit SHA, never `latest`.
+
+---
+
+## 📂 Documentation hub
+
+**Start here:**
+
+- **[Presentation runbook (`docs/presentation.md`)](docs/presentation.md)** — the
+  15-minute pre-flight, the demo order and the fallbacks (Polish).
+- **[Demo script (`docs/demo-script.md`)](docs/demo-script.md)** — commands and
+  "what to say" for each of the eight chapters.
+- **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
+  — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation.
+
+**Go deeper:**
+
+1. **[Runbook (`docs/runbook.md`)](docs/runbook.md)** — code change to smoke test.
+2. **[Security blueprint (`docs/security.md`)](docs/security.md)** — zero-trust,
+   RBAC, Key Vault and storage controls.
+3. **[Architect's Q&A (`docs/questions.md`)](docs/questions.md)** — how to justify
+   the decisions out loud.
+4. **[AKS runtime (`docs/aks.md`)](docs/aks.md)** — cluster design, Workload
+   Identity, probes, HPA and cost.
+5. **[RBAC matrix (`docs/rbac-matrix.md`)](docs/rbac-matrix.md)** — who can do
+   what, on which scope.
+6. **[Secret lifecycle (`docs/secret-lifecycle.md`)](docs/secret-lifecycle.md)** —
+   where the signing key lives and how rotation/revocation work.
+7. **[Architecture decisions (`docs/decisions.md`)](docs/decisions.md)** — the
+   trade-offs, including the ones deliberately declined.
+8. **[Key Vault + Blob deep dive (`docs/deep-dive-keyvault-blob.md`)](docs/deep-dive-keyvault-blob.md)**
+   — layer by layer, with labs and audit proofs.
+9. **[Entra login (`docs/entra-login.md`)](docs/entra-login.md)** — Easy Auth on
+   Container Apps and the one long-lived secret.
+10. **[Study plan (`docs/study.md`)](docs/study.md)** — five sessions, each with a
+    proof command.
+11. **[References (`docs/references.md`)](docs/references.md)** — Microsoft Learn
+    reading list for RBAC, Key Vault, Blob and WAF.
 
 ---
 
 ## 🎓 What I learned building this
-- **Infrastructure Drift**: How to keep the portal and code in sync.
-- **Principle of Least Privilege**: Granting only the exact permissions needed (RBAC).
-- **Immutable Infrastructure**: Why we use SHA tags instead of `latest` for Docker images.
-- **Observability**: Using structured JSON logs to debug production issues.
+
+- **Control plane is not data plane**: an Owner can create a storage account and
+  still get `403` when listing a blob.
+- **Rotation and revocation are different operations**: a version in the URL keeps
+  old links alive through rotation; disabling that version is what revokes them.
+- **Scaling is a contract**: requests, limits, target utilization and a metrics
+  window decide whether the HPA helps or flaps.
+- **Cost is an architecture decision**: one node and one load balancer dominate
+  the bill; lifecycle rules bound the only growing resource.
+- **Readiness is not liveness**: a dependency failure should drain traffic, not
+  restart every pod.

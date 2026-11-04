@@ -71,6 +71,9 @@ czytała sekret. Dwa różne IP to egress AKS (`172.160.193.21`) i Container App
 
 ## 1.5 Lab (bezpieczny, 10 min)
 
+> Aplikacja Drop podpisuje linki sekretem `share-signing-key`. `app-message` to
+> starszy sekret demo i tutaj służy tylko jako bezpieczny, read-only przykład.
+
 ```bash
 # wersje sekretu — każda ma własne id, enabled, created
 az keyvault secret list-versions \
