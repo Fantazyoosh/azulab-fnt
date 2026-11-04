@@ -6,6 +6,13 @@
 // cached is what makes old links survive a rotation: the link names the version
 // it was signed with.
 //
+// A cached version is still re-checked against Key Vault at most once a minute.
+// That is what makes "disable the version" a real revocation: a disabled or
+// deleted version answers 403/404, its cache entry is dropped, and every link
+// carrying it stops verifying. A transient Key Vault failure is treated
+// differently — the cached key keeps working, marked stale, so an outage does
+// not turn into a mass revocation.
+//
 // Without a vault (local development, unit tests) the store generates an
 // ephemeral key and says so, instead of pretending to use Key Vault.
 
@@ -16,6 +23,7 @@ const { SecretClient } = require("@azure/keyvault-secrets");
 const { fingerprint } = require("./seal");
 
 const CURRENT_TTL_MS = 5 * 60 * 1000;
+const VERSION_CHECK_TTL_MS = 60 * 1000;
 
 function publicView(entry) {
   if (!entry) return null;
@@ -28,11 +36,17 @@ function publicView(entry) {
   };
 }
 
-function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
+function createSigningKeyStore({ cfg, credential, logger, now = Date.now, secretClient = null }) {
   const cache = new Map();
   let current = null;
   let inflight = null;
   let ephemeral = null;
+  let client = secretClient;
+
+  function secretClientInstance() {
+    if (!client) client = new SecretClient(cfg.keyVaultUrl, credential);
+    return client;
+  }
 
   function ephemeralKey() {
     if (!ephemeral) {
@@ -50,9 +64,8 @@ function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
   }
 
   async function fetchVersion(version) {
-    const client = new SecretClient(cfg.keyVaultUrl, credential);
     const options = version ? { version } : undefined;
-    const secret = await client.getSecret(cfg.signingSecretName, options);
+    const secret = await secretClientInstance().getSecret(cfg.signingSecretName, options);
     const resolved = secret.properties.version;
     const entry = {
       value: secret.value,
@@ -60,9 +73,11 @@ function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
       source: "keyvault",
       loadedAt: new Date(now()).toISOString(),
       loadedAtMs: now(),
+      checkedAtMs: now(),
       fingerprint: fingerprint(secret.value),
     };
     cache.set(resolved, entry);
+    if (!version) current = entry;
     return entry;
   }
 
@@ -70,8 +85,7 @@ function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
     if (inflight) return inflight;
     inflight = (async () => {
       try {
-        current = await fetchVersion(null);
-        return current;
+        return await fetchVersion(null);
       } catch (err) {
         logger.error({ err: err.message }, "signing key fetch failed");
         if (current) return { ...current, stale: true };
@@ -88,8 +102,22 @@ function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
       if (!cfg.keyVaultUrl) return ephemeralKey();
 
       if (version) {
-        if (cache.has(version)) return cache.get(version);
-        return fetchVersion(version);
+        const cached = cache.get(version);
+        if (cached && now() - cached.checkedAtMs < VERSION_CHECK_TTL_MS) return cached;
+
+        try {
+          return await fetchVersion(version);
+        } catch (err) {
+          // A disabled or deleted version is a revocation, not an outage.
+          if (err.statusCode === 403 || err.statusCode === 404) {
+            cache.delete(version);
+            throw err;
+          }
+          // Anything else is the vault being unavailable: keep the cached key
+          // so outstanding links still verify during a transient failure.
+          if (cached) return { ...cached, stale: true };
+          throw err;
+        }
       }
 
       if (current && now() - current.loadedAtMs < CURRENT_TTL_MS) return current;
@@ -102,4 +130,4 @@ function createSigningKeyStore({ cfg, credential, logger, now = Date.now }) {
   };
 }
 
-module.exports = { CURRENT_TTL_MS, createSigningKeyStore, publicView };
+module.exports = { CURRENT_TTL_MS, VERSION_CHECK_TTL_MS, createSigningKeyStore, publicView };

@@ -60,7 +60,7 @@ export default {
         { class: "mt-4 space-y-2 text-sm text-muted" },
         bullet("The key version is inside the signed payload and in the URL, so a v1 signature cannot be replayed against v2."),
         bullet("Rotating the secret creates a new version. New links use it; links already handed out keep their old version."),
-        bullet("Disabling an old version revokes exactly the links signed with it. That is revocation without a database."),
+        bullet("Disabling an old version revokes exactly the links signed with it. Each replica re-checks a version at most every 60 seconds, so revocation is bounded rather than instant."),
         bullet("Expiry is checked before the signature, so an expired link is a 410, not a 403.")
       )
     );
@@ -108,6 +108,7 @@ export default {
         statRow("Fingerprint", config.keyFingerprint || "—"),
         statRow("Loaded at", fmt.time(config.keyLoadedAt)),
         statRow("Current-version TTL", "5 minutes"),
+        statRow("Version re-check", "60 seconds"),
         source === "ephemeral"
           ? note("No Key Vault configured: this process generated a random key. Restarting it invalidates every link it signed.", "warn")
           : note("Only the version and fingerprint are shown. The secret value is never returned by the API or rendered in the page.", "ok")
