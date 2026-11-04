@@ -18,6 +18,13 @@ const pkg = require("../package.json");
 const { getConfig } = require("./config");
 const { createLogger } = require("./logger");
 const { metrics } = require("./metrics");
+const { createSigningKeyStore } = require("./secrets");
+const { createDropStore } = require("./storage");
+const { createMemoryDropStore } = require("./memory-store");
+const { createBlobAdmin } = require("./blob-admin");
+const { createBlobRouter } = require("./routes/blob");
+const { createDropsRouter, createShareRouter } = require("./routes/drops");
+const { createOpsRouter } = require("./routes/ops");
 
 function createCredential(cfg = {}) {
   return cfg.azureClientId
@@ -141,15 +148,37 @@ function getBlobClient(cfg) {
   return { service, container };
 }
 
-function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state = null) {
+function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state = null, deps = {}) {
   if (!state) state = createState(cfg);
   const app = express();
+
+  const credential = deps.credential !== undefined ? deps.credential : createCredential(cfg);
+  const keys = deps.keys || createSigningKeyStore({ cfg, credential, logger });
+  const store = deps.store !== undefined
+    ? deps.store
+    : cfg.dropStore === "memory"
+      ? createMemoryDropStore()
+      : createDropStore({ cfg, credential });
+  // The blob chapter talks to the real storage account; in memory mode there is
+  // nothing to inspect, so the route answers 503 instead of inventing numbers.
+  const blobAdmin = deps.blobAdmin !== undefined
+    ? deps.blobAdmin
+    : cfg.dropStore === "memory"
+      ? null
+      : createBlobAdmin({ cfg, credential });
 
   app.locals.state = state;
   app.locals.cfg = cfg;
   app.locals.logger = logger;
+  app.locals.keys = keys;
+  app.locals.store = store;
+  app.locals.blobAdmin = blobAdmin;
 
-  app.use(express.json({ limit: cfg.maxUploadBytes }));
+  // Behind the Container Apps proxy and the AKS load balancer the protocol is
+  // decided by the forwarded header, not by the socket. Share links must come
+  // back with the same scheme the user is browsing.
+  app.set("trust proxy", true);
+
   app.use((req, res, next) => {
     const id = req.get("x-request-id") || crypto.randomUUID();
     req.requestId = id;
@@ -160,7 +189,7 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     next();
   });
 
-  // Structured request log + metrics.
+  // Structured request log + metrics. Static assets stay out of the counters.
   app.use(express.static("public"));
 
   app.use((req, res, next) => {
@@ -181,6 +210,15 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     });
     next();
   });
+
+  // The upload route parses raw bytes itself, so the drop routers must be
+  // mounted before the global JSON parser. A 5 MB binary is not JSON.
+  app.use("/api/drops", createDropsRouter({ cfg, logger, store, keys }));
+  app.use("/s", createShareRouter({ store, keys, logger }));
+
+  app.use(express.json({ limit: cfg.maxUploadBytes }));
+  app.use("/api/blob", createBlobRouter({ logger, blobAdmin }));
+
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok", service: "azulab", now: new Date().toISOString() });
   });
@@ -211,15 +249,22 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
       state.storageFailures = result === "error" ? state.storageFailures + 1 : 0;
     }
 
+    // A share link cannot be signed without the key, so a missing key is a real
+    // readiness failure. The probe never blocks on Key Vault: it reports the
+    // cached state and kicks a refresh in the background.
+    const signing = keys.snapshot();
+    if (!signing && cfg.keyVaultUrl) keys.get(null).catch(() => {});
+
     const checks = {
-      keyVault: cfg.keyVaultUrl ? (state.secretLoaded ? "ok" : "error") : "not_configured",
+      keyVault: !cfg.keyVaultUrl ? "not_configured" : signing ? "ok" : "pending",
+      signingKey: signing ? signing.version : null,
       storage: state.storageOk,
       storageConsecutiveFailures: state.storageFailures,
     };
     // One transient failure is not enough to remove a pod from rotation — that
     // would make the Service flap. Two in a row is a real dependency outage.
     const storageOk = checks.storage !== "error" || state.storageFailures < 2;
-    const ok = checks.keyVault !== "error" && storageOk;
+    const ok = checks.keyVault !== "pending" && storageOk;
     res.status(ok ? 200 : 503).json({ status: ok ? "ready" : "not_ready", checks });
   });
 
@@ -358,8 +403,17 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     res.json(metrics.snapshot());
   });
 
+  app.use(createOpsRouter({ cfg, logger, keys, store, credential }));
+
   // Central error handler. Never leak stack traces to clients.
   app.use((err, req, res, _next) => {
+    if (err && err.type === "entity.too.large") {
+      return res.status(413).json({
+        error: "too_large",
+        message: `max ${cfg.maxUploadBytes} bytes`,
+        requestId: req.requestId,
+      });
+    }
     logger.error({ err: err && err.message, stack: err && err.stack, requestId: req.requestId }, "unhandled error");
     const status = err && err.status ? err.status : 500;
     res.status(status).json({ error: "internal_error", message: "something went wrong", requestId: req.requestId });
@@ -375,6 +429,9 @@ function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   // than crashes, so the pod stays alive for debugging.
   loadSecretWithRetry(cfg, logger, state).catch((e) => logger.error({ err: e.message }, "loadSecret rejected"));
   const app = buildApp(cfg, logger, state);
+  // Warm the signing key so the first share does not pay the Key Vault round
+  // trip. Failure is not fatal: /ready reports "pending" and retries.
+  app.locals.keys.get(null).catch((e) => logger.warn({ err: e.message }, "signing key not loaded yet"));
 
   const server = app.listen(cfg.port, () => {
     logger.info({ port: cfg.port }, "azulab listening");
