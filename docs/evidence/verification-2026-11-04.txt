@@ -1,6 +1,8 @@
 # Azulab Drop — verification evidence
 # Generated: 2026-11-04T15:56:26Z
-# Build: 163458f634141500ee4c69b89e862d2b56892f04
+# Build measured: 163458f634141500ee4c69b89e862d2b56892f04
+# Current UI build: 51474b8903c7b7fa3ea5774dc02b002f7f34ef53
+# (later commits change only the Availability crash outcome and screenshots)
 # AKS: http://74.158.77.185/
 # ACA: https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io
 
@@ -96,6 +98,27 @@ Revocation (deterministic, one pod via kubectl port-forward):
 The version cache re-checks Key Vault at most every 60 s, so revocation is
 bounded rather than instant. The V3 link stayed 200 throughout. V2 was
 re-enabled and the old link returned 200 again.
+
+## Availability — crash continuity (UI build 51474b8)
+
+$ curl -s -X POST http://74.158.77.185/debug/crash
+{"crashing":true,"pod":"azulab-84fcbf976b-sv8zb"}
+
+UI timeline:
+17:42:01  crash accepted by azulab-84fcbf976b-sv8zb
+17:42:02  first answer from another pod after 782 ms
+17:42:19  crash completed; Service stayed available
+          0 failed health checks
+
+$ kubectl -n azulab get pod azulab-84fcbf976b-sv8zb \
+    -o jsonpath='{.status.containerStatuses[0].restartCount}'
+1
+$ kubectl -n azulab get pods
+azulab-84fcbf976b-dctpv   0   true
+azulab-84fcbf976b-sv8zb   1   true
+
+The pod name survived; the container restarted in place. The other replica served
+every request while it came back. The screenshot is docs/img/availability.png.
 
 ## Blob Storage and lifecycle
 
