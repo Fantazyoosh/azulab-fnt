@@ -305,7 +305,9 @@ Say:
 > and the rollout is `maxSurge 1 / maxUnavailable 0`. Two replicas on one node
 > share the node's fate; zone redundancy was declined on cost.
 
-Optional crash (the UI button does this against the pod that served the page):
+Optional crash (the UI's **Kill this container** button does this; the kubelet
+restarts the container in the same pod, so the pod name survives and the restart
+count increments):
 
 ```bash
 curl -s -X POST "http://$AKS/debug/crash"
