@@ -51,10 +51,12 @@ az containerapp auth microsoft update -g "$RG" -n "$APP" \
   --tenant-id "$TENANT" \
   --yes >/dev/null
 
+# /s/* is the signed share link. Its credential is the HMAC in the URL, so it
+# must stay anonymous on both runtimes; everything else requires a session.
 az containerapp auth update -g "$RG" -n "$APP" \
   --enabled true \
   --action RedirectToLoginPage \
-  --excluded-paths "/health,/ready" \
+  --excluded-paths "/health,/ready,/s/*" \
   --require-https true >/dev/null
 
 # Secret changes only apply to a new or restarted revision.
@@ -65,7 +67,7 @@ cat <<EOF
 Easy Auth enabled.
 
   login        https://$FQDN/.auth/login/aad
-  excluded     /health, /ready
+  excluded     /health, /ready, /s/*
   redirect     $REDIRECT
   app id       $APP_ID
   secret       Container App secret (created by the auth command, rotates in 1 year)

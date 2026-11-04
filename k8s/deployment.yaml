@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: azulab
     app.kubernetes.io/part-of: azulab
 spec:
-  replicas: 2
-
+  # Replicas are owned by the HorizontalPodAutoscaler (min 2, max 6). Leaving
+  # the field out means a manifest apply cannot fight the HPA for the count.
   # Zero-downtime rollout: create the new pod first (maxSurge 1) and never take
   # an old one down while the new one is not Ready (maxUnavailable 0). With
   # readinessProbe on /ready, traffic only reaches a pod that can actually
@@ -90,6 +90,23 @@ spec:
               value: "https://stazulabdev6mvarl.blob.core.windows.net"
             - name: CONTAINER_NAME
               value: "demo"
+            # Drop product flow. DROP_STORE=azure is explicit: the in-memory
+            # store exists for local development and must never be the default
+            # on a deployed instance.
+            - name: DROP_STORE
+              value: "azure"
+            - name: DROP_CONTAINER
+              value: "drops"
+            # Secret *name*, not the value. The app reads a versioned key from
+            # Key Vault and reports only the version and a fingerprint.
+            - name: SHARE_SIGNING_SECRET
+              value: "share-signing-key"
+            # Used by the RBAC chapter to attempt a control-plane call that the
+            # runtime identity must be denied.
+            - name: AZURE_SUBSCRIPTION_ID
+              value: "f2c06f27-c982-4ecb-b81b-604acd6f52d3"
+            - name: AZURE_RESOURCE_GROUP
+              value: "rg-azulab-dev-polandcentral"
             # Fail fast: only try Workload Identity, never IMDS or CLI probing.
             - name: AZURE_TOKEN_CREDENTIALS
               value: "WorkloadIdentityCredential"
@@ -143,9 +160,15 @@ spec:
 
           resources:
             requests:
-              cpu: 50m
+              # The HPA targets 60% of this request. 100m is low enough that a
+              # few parallel seals move the metric, high enough that an idle pod
+              # is not permanently above target.
+              cpu: 100m
               memory: 128Mi
             limits:
+              # A hard cap keeps six replicas inside one 2-vCPU node and makes
+              # the throttle visible in seal latency instead of starving the
+              # kubelet.
               cpu: 300m
               memory: 384Mi
 

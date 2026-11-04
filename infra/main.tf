@@ -132,6 +132,38 @@ resource "azurerm_storage_container" "demo" {
   container_access_type = "private"
 }
 
+# The drop product flow. One container, private like the rest: the app reaches
+# it with its managed identity, never with a key.
+resource "azurerm_storage_container" "drops" {
+  name                  = "drops"
+  storage_account_id    = azurerm_storage_account.main.id
+  container_access_type = "private"
+}
+
+# The only growth bound on user content. Blobs under drops/ stay Hot for a
+# month, move to Cool, and are deleted after 90 days. Versioning remains on:
+# the lifecycle rule ages out the current version, which is what a demo needs.
+resource "azurerm_storage_management_policy" "main" {
+  storage_account_id = azurerm_storage_account.main.id
+
+  rule {
+    name    = "drops-retention"
+    enabled = true
+
+    filters {
+      prefix_match = ["drops/"]
+      blob_types   = ["blockBlob"]
+    }
+
+    actions {
+      base_blob {
+        tier_to_cool_after_days_since_creation_greater_than = 30
+        delete_after_days_since_creation_greater_than       = 90
+      }
+    }
+  }
+}
+
 # The deploying principal used to receive Key Vault Administrator directly here.
 # Human admin access is now held by the azulab-platform-admins group
 # (scripts/setup-entra-groups.sh), so Terraform must stop managing this
@@ -197,6 +229,28 @@ resource "azurerm_container_app" "app" {
       env {
         name  = "CONTAINER_NAME"
         value = "demo"
+      }
+      # Drop product flow. Same values as the AKS manifest: explicit store,
+      # separate signing secret name, and the scope used by the RBAC probe.
+      env {
+        name  = "DROP_STORE"
+        value = "azure"
+      }
+      env {
+        name  = "DROP_CONTAINER"
+        value = "drops"
+      }
+      env {
+        name  = "SHARE_SIGNING_SECRET"
+        value = "share-signing-key"
+      }
+      env {
+        name  = "AZURE_SUBSCRIPTION_ID"
+        value = data.azurerm_client_config.current.subscription_id
+      }
+      env {
+        name  = "AZURE_RESOURCE_GROUP"
+        value = azurerm_resource_group.main.name
       }
       env {
         name  = "AZURE_CLIENT_ID"
