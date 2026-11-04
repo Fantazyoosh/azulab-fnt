@@ -47,7 +47,7 @@ z grupy `azulab-deployers`. Ja dziedziczę dostęp do sejfu z
 ```bash
 az keyvault show -n kv-azulab-dev-6mvarl \
   --query "{purge:properties.enablePurgeProtection, softDelete:properties.softDeleteRetentionInDays}"
-az keyvault secret list-versions --vault-name kv-azulab-dev-6mvarl --name app-message -o table
+az keyvault secret list-versions --vault-name kv-azulab-dev-6mvarl --name share-signing-key -o table
 ```
 
 Audyt (Log Analytics):
@@ -183,7 +183,7 @@ Dlatego awaria Key Vault drenuje ruch, a nie restartuje wszystkich replik."
 
 | Chcę zrozumieć | Plik |
 | --- | --- |
-| Dashboard na żywo | `http://<AKS-IP>/` — zakładki Overview / Architecture / Security / Delivery |
+| Aplikacja na żywo | `http://<AKS-IP>/` — Drop / Blob / RBAC / Key Vault / Scaling / Cost / Availability / Delivery |
 | RBAC i grupy | `docs/rbac-matrix.md`, `docs/drill-rbac-kv.md` (A) |
 | Key Vault | `docs/secret-lifecycle.md`, `docs/deep-dive-keyvault-blob.md` (1) |
 | Blob Storage | `docs/deep-dive-keyvault-blob.md` (2) |
@@ -194,4 +194,4 @@ Dlatego awaria Key Vault drenuje ruch, a nie restartuje wszystkich replik."
 | Linki Microsoft Learn | `docs/references.md` |
 | Demo krok po kroku | `docs/demo-script.md` |
 | Dzień rozmowy | `docs/presentation.md` |
-| Dowody weryfikacji | `docs/evidence/verification-2026-11-03.txt` |
+| Dowody weryfikacji | `docs/evidence/verification-2026-11-04.txt` |

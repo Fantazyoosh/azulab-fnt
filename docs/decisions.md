@@ -133,17 +133,21 @@ Container App resource.
 
 ---
 
-## ADR-009 — No ingress controller, no HPA, no service mesh
+## ADR-009 — No ingress controller, no service mesh; HPA on a fixed node
 
-**Context.** Each adds pods, CRDs or cost, and none changes the lesson.
+**Context.** Each extra component adds pods, CRDs or cost. Autoscaling, however,
+is a claim worth demonstrating: the seal is CPU-bound, so the HPA has an honest
+signal to react to.
 
-**Decision.** A `LoadBalancer` Service, fixed 2 replicas, no mesh.
+**Decision.** A `LoadBalancer` Service, an HPA from 2 to 6 replicas at 60% CPU,
+no mesh, no cluster autoscaler.
 
 **Consequences.**
 - One public IP per Service; no TLS termination or path routing.
-- No autoscaling demonstration. HPA on a 2 vCPU node with a 50m request would
-  mostly demonstrate scheduling, not scaling.
-- Documented as the production next step.
+- The HPA adds pods until the single 2-vCPU node is saturated; it cannot add
+  capacity. That is the honest limit shown in the Scaling chapter.
+- The cluster autoscaler and a second node are the documented production next
+  steps, not part of the demo budget.
 
 ---
 

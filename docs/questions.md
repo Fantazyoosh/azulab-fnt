@@ -205,16 +205,17 @@ Gdzie: `.github/workflows/`
 - **PR checks**: lint, testy, docker build, `terraform fmt/validate`. Czerwone = brak
   merge'a.
 - **CI**: testy + build + push obrazu z SHA.
-- **CD**: `az containerapp update` + smoke test `/health`; brak 200 w 150 s = fail.
+- **CD**: `az containerapp update` + smoke test `/health` i `/ready`; brak 200 = fail.
 - **AKS**: `kubectl rollout status` z timeoutem; `kubectl get events` przy błędzie.
 
 ## 20. Czego w projekcie jeszcze nie ma (i wiem o tym)?
 
 Gdzie: `docs/aks.md` (tabela trade-offów)
 
-Brak HPA, ingressa z TLS, NetworkPolicy, private API server, Azure RBAC for
-Kubernetes i GitOps. Każdy z tych punktów jest świadomą decyzją kosztową, nie
-przeoczeniem — i ma wpisany plan produkcyjny.
+HPA jest (2 → 6 na jednym node), ale brakuje cluster autoscalera, ingressa z TLS,
+NetworkPolicy, private API server, Azure RBAC for Kubernetes i GitOps. Każdy z
+tych punktów jest świadomą decyzją kosztową, nie przeoczeniem — i ma wpisany plan
+produkcyjny.
 
 ## 21. Dlaczego role nadajesz grupom, a nie użytkownikom?
 

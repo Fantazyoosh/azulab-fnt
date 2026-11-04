@@ -165,4 +165,4 @@ czyta raz przy starcie i cache'uje). Docelowo Event Grid `SecretNearExpiry`
 | Workload Identity | `k8s/serviceaccount.yaml`, `infra/aks.tf` | `kubectl -n azulab exec deploy/azulab -- env \| grep AZURE_` |
 | Brak sekretów | `k8s/` | `kubectl -n azulab get secrets` |
 | Logi | `infra/main.tf` | `az monitor diagnostic-settings list --resource <id>` |
-| Cykl życia | `docs/secret-lifecycle.md` | `az keyvault secret list-versions --vault-name kv-azulab-dev-6mvarl --name app-message` |
+| Cykl życia | `docs/secret-lifecycle.md` | `az keyvault secret list-versions --vault-name kv-azulab-dev-6mvarl --name share-signing-key` |

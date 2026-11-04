@@ -1,5 +1,10 @@
 # Learning guide — what v0.2 changed and why
 
+> **Note:** this guide covers the earlier v0.2 baseline. The current application
+> is **Azulab Drop** (upload → seal → signed link); for its flow and chapters see
+> [`README.md`](../README.md) and [`docs/demo-script.md`](demo-script.md). The
+> platform lessons below still apply.
+
 Read this **before** the weekend. Each item below is a small, deliberate change you
 should open in your editor and re-type yourself during Saturday (even though the
 code already ships). The goal is not to memorise it — it is to be able to explain

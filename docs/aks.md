@@ -17,7 +17,7 @@ GitHub main ──CI──► GHCR :<commit-sha>
              ┌───────────┴────────────┐
              ▼                        ▼
      Container Apps              AKS (swedencentral)
-     ca-azulab-dev               ns: azulab, 2 replicas
+     ca-azulab-dev               ns: azulab, HPA 2–6
      managed identity            Workload Identity (federated token)
              │                        │
              └───────────┬────────────┘
@@ -62,7 +62,7 @@ Quota in `swedencentral`: 4 vCPU per family, so a single 2-vCPU node fits.
 | Public API server | larger attack surface | private cluster + private DNS |
 | Local accounts enabled | `az aks get-credentials` returns a cluster-admin kubeconfig | `local_accounts_enabled = false` + Azure RBAC for Kubernetes |
 | No ingress controller | one LB per Service | ingress-nginx / AGIC + TLS |
-| No HPA | 2 vCPU node, fixed replicas | HPA + cluster autoscaler |
+| No cluster autoscaler | HPA 2–6 on one fixed 2-vCPU node; the node is the ceiling | cluster autoscaler + multiple nodes |
 | No NetworkPolicy | kubenet has no policy engine | Azure CNI + Calico/Cilium |
 
 Every row is a conscious cost/teaching decision, not an oversight.
@@ -99,6 +99,7 @@ credential source.
 | `serviceaccount.yaml` | the identity bridge; the annotation must match the federated credential |
 | `deployment.yaml` | `maxUnavailable: 0` + readiness probe = zero-downtime; `preStop` sleep lets kube-proxy drain; liveness checks only the process |
 | `service.yaml` | `LoadBalancer` with an HTTP health probe on `/health` |
+| `hpa.yaml` | HPA 2 → 6 at 60% CPU; the deployment omits `spec.replicas` so the HPA owns the count |
 | `pdb.yaml` | `minAvailable: 1` protects against node drains |
 | `kustomization.yaml` | baseline image tag; CD injects the immutable tag on every merge |
 
@@ -112,6 +113,27 @@ credential source.
 
 Liveness deliberately **does not** check dependencies. If it did, a Key Vault
 outage would restart every replica and turn a degradation into an outage.
+
+### Autoscaling
+
+The HPA scales on CPU utilization relative to the **request**, not the limit:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `minReplicas` | 2 | a rollout or a lost pod never leaves one replica |
+| `maxReplicas` | 6 | a single 2-vCPU node can plausibly feed six throttled pods |
+| target | 60% of request | a few parallel seals move the metric without flapping |
+| request / limit | 100m / 300m | low request makes the signal visible; hard limit protects the kubelet |
+| scale-down stabilization | 60 s | long enough to avoid flapping, short enough for a demo |
+
+The seal is PBKDF2 on the libuv threadpool, roughly a third of a core-second at
+600,000 iterations. That is real CPU the metrics-server can see, and the event
+loop keeps answering health checks while it runs. The HPA reacts on a ~15 s
+metrics window; a 12-second burst may scale 2 → 3, while a sustained burn reaches
+the ceiling of 6 and returns to 2 after the stabilization window.
+
+There is deliberately **no cluster autoscaler**: the node is fixed, so the HPA
+adds pods but cannot add capacity. That limit is the point of the Cost chapter.
 
 ---
 

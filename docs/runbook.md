@@ -38,7 +38,7 @@ them. Every command here has been executed against the live lab.
 | --- | --- | --- |
 | Name | `ca-azulab-dev` | `aks-azulab-dev` |
 | Region | `polandcentral` | `swedencentral` |
-| Scale | 0 → 2 replicas | fixed 2 replicas, 1 node |
+| Scale | 0 → 2 replicas | HPA 2 → 6 replicas, 1 node |
 | Identity | user-assigned managed identity | Workload Identity (same UAMI) |
 | Deploy | `az containerapp update` | `kubectl apply -k k8s/` |
 | Rollback | activate previous revision | `kubectl rollout undo` |
@@ -214,8 +214,9 @@ dependency; do not restart the pods.
 | Endpoint | Probe | Checks | Failure action |
 | --- | --- | --- | --- |
 | `/health` | liveness / startup | process only | restart the container |
-| `/ready` | readiness | Key Vault secret loaded + Blob Storage reachable | remove from Service endpoints |
-| `/api/message` | smoke | business logic returns valid JSON | pipeline fails |
+| `/ready` | readiness | signing key loaded + Blob Storage reachable | remove from Service endpoints |
+| `/api/config` | diagnostic | store, Key Vault mode, key version | none |
+| `/api/drops` | product smoke (manual) | the drop catalogue is readable | demo fails |
 | `/version` | diagnostic | pod, node, namespace, image SHA | none |
 
 Liveness deliberately does **not** check dependencies.

@@ -14,7 +14,9 @@ browser ──► https://ca-azulab-dev…/
 ```
 
 `/health` and `/ready` are excluded so probes and the CD smoke test keep working.
-Everything else (`/`, `/api/*`, `/version`) returns `401` without a session.
+`/s/*` is also excluded: a signed share link carries its own HMAC credential and
+must work without a session. Everything else (`/`, `/api/*`, `/version`) returns
+`401` without a session.
 
 ---
 
@@ -26,7 +28,7 @@ Everything else (`/`, `/api/*`, `/version`) returns `401` without a session.
 | Sign-in audience | single tenant (`AzureADMyOrg`) |
 | Redirect URI | `https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io/.auth/login/aad/callback` |
 | Client secret | Container App secret `microsoft-provider-authentication-secret`, created by the Easy Auth command (not in Git, not in Terraform) |
-| Excluded paths | `/health`, `/ready` |
+| Excluded paths | `/health`, `/ready`, `/s/*` |
 | Unauthenticated action | `RedirectToLoginPage` for browsers; `401` for API clients |
 
 The whole setup is reproducible with [`scripts/setup-easy-auth.sh`](../scripts/setup-easy-auth.sh).

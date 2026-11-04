@@ -1,4 +1,5 @@
-# Azulab — verification evidence
+# Azulab — verification evidence (historical)
+# Superseded by verification-2026-11-04.txt (Azulab Drop, HPA 2-6, bounded revocation).
 # Generated: 2026-11-03T17:59:06+01:00
 # AKS endpoint: http://74.158.77.185/
 # AKS image: ghcr.io/fantazyoosh/azulab-fnt:3075b49585a99ca772358bb91d5f841fbb04ea5c
