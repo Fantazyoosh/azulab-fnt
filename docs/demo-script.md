@@ -311,6 +311,9 @@ count increments):
 
 ```bash
 curl -s -X POST "http://$AKS/debug/crash"
+
+# Same pod name, incremented restart count — proof of an in-place restart:
+kubectl -n azulab get pods -o custom-columns='NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount,READY:.status.containerStatuses[0].ready'
 ```
 
 ---

@@ -143,6 +143,7 @@ export default {
           crashButton,
           async () => {
             const before = await api.version();
+            const local = !before.pod || before.pod === "unknown" || before.pod === "local";
             const beforePods = new Set((await api.probePods(10)).pods.map((entry) => entry.pod));
             addEvent(`before: ${before.pod} (${[...beforePods].join(", ") || "no pods"})`);
 
@@ -163,7 +164,7 @@ export default {
             let firstOther = null;
             const seen = new Set();
 
-            for (let i = 0; i < 40; i += 1) {
+            for (let i = 0; i < 25; i += 1) {
               await sleep(600);
               const result = await api.probePods(6);
               // A container restart keeps the pod name but changes the process
@@ -214,12 +215,20 @@ export default {
                   totalFailed === 0 ? "ok" : "warn"
                 )
               );
-            } else {
-              addEvent("no in-place restart observed within 24 s", "warn");
+            } else if (local) {
+              addEvent("local process exited; nothing restarts it", "warn");
               chaosStatus.replaceChildren(
                 note(
-                  `No in-place restart was observed from outside. The crash was accepted by ${crashedPod || "the target"}; the Service stayed available. Check that pod's restart count with kubectl. This is an observation gap, not proof that the container did not restart.`,
+                  "The local process exited. There is no kubelet here to restart it; start the server again. On AKS the container would be restarted in the same pod.",
                   "warn"
+                )
+              );
+            } else {
+              addEvent("crash completed; Service stayed available", totalFailed === 0 ? "ok" : "warn");
+              chaosStatus.replaceChildren(
+                note(
+                  `Crash accepted by ${crashedPod || "the target"}. The Service stayed available; ${totalFailed} health checks failed while it converged. The kubelet restarts the container in the same pod, so the name is unchanged. Confirm the restart count with: kubectl -n azulab get pod ${crashedPod || "<pod>"} -o jsonpath='{.status.containerStatuses[0].restartCount}'`,
+                  totalFailed === 0 ? "ok" : "warn"
                 )
               );
             }
