@@ -1,0 +1,35 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: azulab
+  namespace: azulab
+  labels:
+    app.kubernetes.io/name: azulab
+    app.kubernetes.io/part-of: azulab
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: azulab
+
+  # The seal is CPU-bound, so CPU utilization is an honest signal. Two replicas
+  # keep the Service available during a rollout; six is the ceiling a single
+  # 2-vCPU node can plausibly feed without turning the demo into a queue.
+  minReplicas: 2
+  maxReplicas: 6
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Percentage of the container's CPU *request* (100m), not the limit.
+          averageUtilization: 60
+
+  behavior:
+    scaleDown:
+      # A 60 s window keeps a short burst from flapping the replica count. The
+      # default (300 s) would make the "watch it scale down" part of the demo
+      # take five minutes.
+      stabilizationWindowSeconds: 60

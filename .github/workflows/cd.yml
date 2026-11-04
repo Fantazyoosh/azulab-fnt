@@ -90,6 +90,9 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --name "${{ vars.AKS_CLUSTER }}" \
             --overwrite-existing
+          # The HPA owns the replica count. Apply it before the rollout so the
+          # new ReplicaSet starts at the intended minimum instead of one pod.
+          kubectl apply -f k8s/hpa.yaml
           IMAGE="${{ steps.image.outputs.image }}"
           TAG="${IMAGE##*:}"
           kubectl -n azulab set image deploy/azulab azulab="$IMAGE"

@@ -125,4 +125,125 @@
   .kbd {
     @apply rounded border border-line bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-muted;
   }
+
+  .tab-index {
+    @apply mr-2 text-[9px] tracking-normal text-muted/60;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted;
+  }
+
+  .badge-ok {
+    @apply border-ok/40 bg-ok/10 text-ok;
+  }
+
+  .badge-warn {
+    @apply border-warn/40 bg-warn/10 text-warn;
+  }
+
+  .badge-bad {
+    @apply border-bad/40 bg-bad/10 text-bad;
+  }
+
+  .badge-accent {
+    @apply border-accent/40 bg-accent/10 text-accent;
+  }
+
+  .note {
+    @apply rounded border px-3 py-2 text-sm leading-relaxed;
+  }
+
+  .note-muted {
+    @apply border-line bg-black/20 text-muted;
+  }
+
+  .note-ok {
+    @apply border-ok/30 bg-ok/5 text-ok;
+  }
+
+  .note-warn {
+    @apply border-warn/35 bg-warn/5 text-warn;
+  }
+
+  .note-bad {
+    @apply border-bad/35 bg-bad/5 text-bad;
+  }
+
+  .dropzone {
+    @apply flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-black/20 px-6 py-10 text-center transition-colors hover:border-accent/60 hover:bg-accent/5;
+  }
+
+  .dropzone[data-active="true"] {
+    @apply border-accent bg-accent/10;
+  }
+
+  .btn-sm {
+    @apply px-2 py-1 text-[9px];
+  }
+
+  .table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .table th {
+    @apply border-b border-line px-2 py-2 text-left font-mono text-[10px] font-normal uppercase tracking-[0.16em] text-muted;
+  }
+
+  .table td {
+    @apply border-b border-line px-2 py-2.5 align-top text-paper;
+  }
+
+  .table tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .timeline {
+    @apply mt-4 space-y-3 border-l border-line pl-4;
+  }
+
+  .timeline-item {
+    @apply relative text-sm text-muted;
+  }
+
+  .timeline-item::before {
+    content: "";
+    @apply absolute -left-[21px] top-1.5 h-1.5 w-1.5 rounded-full bg-muted;
+  }
+
+  .timeline-item[data-tone="ok"]::before {
+    @apply bg-ok;
+  }
+
+  .timeline-item[data-tone="warn"]::before {
+    @apply bg-warn;
+  }
+
+  .timeline-item[data-tone="bad"]::before {
+    @apply bg-bad;
+  }
+
+  .toast-host {
+    @apply fixed bottom-4 right-4 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2;
+  }
+
+  .toast {
+    @apply rounded border px-4 py-3 text-sm shadow-lg shadow-black/40;
+  }
+
+  .toast-ok {
+    @apply border-ok/40 bg-panel text-ok;
+  }
+
+  .toast-bad {
+    @apply border-bad/40 bg-panel text-bad;
+  }
+
+  .meter {
+    @apply h-2 w-full overflow-hidden rounded-sm bg-line;
+  }
+
+  .meter-fill {
+    @apply h-full rounded-sm bg-accent/70;
+  }
 }
