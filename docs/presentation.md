@@ -392,6 +392,138 @@ klucza, ale jest credentialem — traktuj go jak hasło.
 
 ---
 
+## 4a. Bezpieczeństwo opowiedziane po ludzku
+
+To jest wersja do **opowiedzenia osobie początkującej**, nie do recytacji.
+Wyobraź sobie mały, prywatny magazyn na pliki: ludzie zostawiają dokument,
+dostają pieczęć i podpisany bilet, z którym mogą później odebrać plik. Cała
+sztuka polega na tym, żeby magazyn był wygodny, ale nie otwarty dla każdego
+i żeby nikt nie mógł podmienić dokumentu ani biletu.
+
+Bezpieczeństwo w tym projekcie to historia o czterech drzwiach: **kto ma dostęp,
+kim jest aplikacja, gdzie leży klucz i co dzieje się z plikami**.
+
+### RBAC — kto ma klucz do których drzwi
+
+RBAC to system ról, nie lista haseł. Każda rola mówi: kto, co i na jakim zakresie
+może zrobić. Najważniejsze jest rozróżnienie na **control plane** i **data plane**.
+
+Control plane to zarząd budynku: może wynająć lokal, podpisać umowę, zmienić
+właściciela. Data plane to wejście do konkretnego mieszkania — potrzebujesz
+klucza do środka. Owner subskrypcji jest jak zarząd: może utworzyć storage
+account, ale to nie znaczy, że ma klucz do blobów. Dlatego moje konto dostaje
+**403**, gdy próbuje wylistować pliki. To nie awaria — to dowód, że control plane
+nie jest data plane.
+
+Pipeline ma Contributor na resource group. Może wdrożyć aplikację, ale nie ma
+roli do czytania sekretów. Runtime ma tylko dwie wąskie role: **Key Vault
+Secrets User** na jednym sejfie i **Storage Blob Data Contributor** na jednym
+koncie. Człowiek jest Ownerem subskrypcji, ale nie ma roli do danych. Każdy ma
+dokładnie tyle, ile potrzebuje — to jest least privilege.
+
+Role nadaję grupom, nie użytkownikom. Dzięki temu onboarding to dodanie do
+grupy, a offboarding to usunięcie z grupy. Pipeline nie ma żadnych bezpośrednich
+przypisań — dziedziczy Contributor z grupy `azulab-deployers`.
+
+Trzy probe’y w UI pokazują to w praktyce: **200** — runtime czyta sekret,
+**200** — listuje bloby, **403** — nie może pobrać kluczy konta storage. Ten
+trzeci wynik jest cenny: nawet gdyby ktoś przejął pod, nie wyciągnie z niego
+klucza do całego konta.
+
+Uczciwa uwaga: Owner **może sobie nadać** rolę data-plane, jeśli ma uprawnienia
+do przypisywania ról. Więc to nie jest twarda granica bezpieczeństwa — to jawna,
+audytowana decyzja. W produkcji ogranicza się to przez PIM i warunki.
+
+### Tożsamość — skąd aplikacja wie, kim jest
+
+Aplikacja nie ma hasła. Ma **managed identity** — tożsamość Azure, którą Azure
+wydaje jak legitymację. Aplikacja prosi Entra ID o token i pokazuje go Key
+Vaultowi i Storage. Nie ma sekretu w kodzie, w zmiennych środowiskowych ani
+w Kubernetes Secret.
+
+Na AKS działa **Workload Identity**: Kubernetes rzutuje krótkotrwały token
+service account do poda, a Entra wymienia go na token Azure. To ta sama managed
+identity, tylko podana w sposób bezpieczny dla Kubernetesa. GitHub Actions robi
+podobnie przez **OIDC**: GitHub wydaje krótkotrwały token, Azure go wymienia,
+a w repo nie ma `AZURE_CLIENT_SECRET`.
+
+To jest fundament: **tożsamość zamiast sekretów**. Nie ukrywam hasła
+w konfiguracji — aplikacja po prostu jest sobą, a Azure to potwierdza.
+
+### Key Vault — sejf z pieczątką do biletów
+
+Key Vault to sejf. W nim leży sekret **`share-signing-key`**, którym aplikacja
+podpisuje linki do plików. Aplikacja nigdy nie pokazuje wartości klucza — w UI
+widzisz tylko **wersję** i **fingerprint**, czyli krótki hash wartości.
+Fingerprint pozwala zauważyć, że klucz się zmienił, bez ujawniania sekretu.
+
+Klucz ma wersje. **Rotacja** to dodanie nowej wersji — jak nowa pieczątka
+w biurze. Nowe linki dostają nową wersję, ale stare linki nadal niosą swoją
+starą wersję i nadal działają. **Wyłączenie wersji** to zniszczenie starej
+pieczątki: linki z tą wersją dostają **403** w ciągu maksymalnie 60 sekund.
+To jest rewokacja bez bazy danych — unieważniasz całą wersję, nie każdy link
+osobno.
+
+Dwie stałe warto rozróżnić: **5 minut** to TTL bieżącej wersji — po tylu nowe
+linki przechodzą na nowy klucz. **60 sekund** to re-check wersji w cache — po
+tylu wyłączenie wersji rewokuje stare linki.
+
+I najważniejsza korekta: **seal nie ma klucza**. Seal to wolny odcisk pliku —
+SHA-256, a potem PBKDF2 z 600 000 iteracji. „Password” to digest pliku, salt to
+id dropa; oba są publiczne. Klucz z Key Vault jest tylko do **HMAC podpisu
+linku**, nie do sealowania. Seal nie jest szyfrowaniem, MAC-iem ani podpisem —
+to integralność i koszt CPU.
+
+### Blob — magazyn bez master key
+
+Blob Storage to magazyn na pliki. Kontener `drops` jest prywatny, a **shared key
+jest wyłączony** — nie ma „master password” do konta. Aplikacja czyta i pisze
+przez managed identity, nie przez klucz.
+
+Każdy drop to trzy bloby: `file` — bajty pliku, `meta.json` — nazwa, rozmiar,
+typ, digest, pod i czasy, `seal.json` — algorytm, iteracje, digest, seal,
+sealedAt i pod. Nazwa pliku jest tylko metadata; blob zawsze nazywa się `file`,
+więc żadna nazwa z `../` nie może uciec z kontenera.
+
+Są też zabezpieczenia danych: **versioning** i **soft delete 7 dni** —
+przypadkowe nadpisanie lub usunięcie da się odzyskać. **Lifecycle** ogranicza
+wzrost: Cool po 30 dniach, delete po 90. Publiczny dostęp do blobów jest
+wyłączony, TLS 1.2, HTTPS only.
+
+Człowiek nie czyta blobów bezpośrednio, bo Owner to control plane. Runtime ma
+`Storage Blob Data Contributor`, więc aplikacja widzi dane. To celowe
+rozdzielenie: zarząd nie ma klucza do mieszkania.
+
+### Całość — co powiedzieć na głos
+
+> „Bezpieczeństwo opieram na tożsamości, nie na sekretach. GitHub Actions używa
+> OIDC, runtime używa managed identity, a na AKS Workload Identity — w podzie
+> nie ma sekretu. Storage ma wyłączony shared key i prywatne kontenery;
+> aplikacja czyta dane przez swoją tożsamość. Klucz do podpisywania linków jest
+> w Key Vault, wersjonowany; aplikacja widzi tylko wersję i fingerprint.
+> Rotacja nie łamie starych linków, a wyłączenie wersji rewokuje je w ciągu
+> 60 sekund. RBAC opieram na grupach: pipeline ma Contributor na resource group,
+> runtime tylko dwie wąskie role data-plane, a Owner subskrypcji nie ma dostępu
+> do danych — dlatego lista blobów daje 403. Jeden długotrwały sekret to client
+> secret Easy Auth; reszta to tożsamość i jawne, audytowane decyzje.”
+
+### Co jeszcze warto dopowiedzieć
+
+- **TLS 1.2 i HTTPS only** na Storage.
+- **Key Vault:** RBAC, purge protection, soft delete 7 dni, diagnostyka.
+- **Log Analytics:** `SecretGet` pokazuje OID tożsamości, która czytała sekret.
+- **Easy Auth:** root ACA zwraca 401; `/s/*` jest wyjątkiem, bo link sam jest
+  credentialem. To jedyny długotrwały sekret w projekcie.
+- **Świadome luki:** publiczny API server AKS, local accounts, kubenet bez
+  NetworkPolicy, brak private endpoints, PIM, Defendera i skanowania obrazu.
+  W produkcji: 2–3 node’y w strefach, private endpoints, NetworkPolicy, PIM,
+  Defender for Containers, Trivy/SBOM w CI.
+
+Bezpieczeństwo nie polega na tym, że „nic nie może się stać”, tylko na tym, że
+**wiem, co może się stać i co z tym zrobiłem**.
+
+---
+
 ## 5. Scenariusz 12 minut — mów tak
 
 ### Otwarcie (90 s)
