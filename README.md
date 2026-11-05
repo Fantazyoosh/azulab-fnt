@@ -156,6 +156,9 @@ to say. It is written in Polish.
 - **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
   — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation,
   crash continuity.
+- **[Azure map (`docs/azure-map.md`)](docs/azure-map.md)** — where to inspect every
+  resource in the Portal and CLI, plus the real state of RBAC, security and
+  scanning (including what is deliberately missing).
 
 **Go deeper:**
 

@@ -10,6 +10,9 @@ go komendą z sekcji Preflight). Wersję i pod pokaże `/version` oraz nagłówe
 Komendy do każdego kroku: [`docs/demo-script.md`](demo-script.md). Ten przewodnik
 tłumaczy **dlaczego**, tamten pokazuje **jak**.
 
+Gdzie w Azure Portal/CLI podejrzeć każdy zasób, uprawnienia, bezpieczeństwo
+i skanowanie: [`docs/azure-map.md`](azure-map.md).
+
 ---
 
 ## 1. Projekt w jednym akapicie
