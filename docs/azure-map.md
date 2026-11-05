@@ -188,6 +188,10 @@ az keyvault secret show --vault-name kv-azulab-dev-6mvarl \
 Ostatnia komenda **nie pokazuje wartości** — tylko metadane. Wartości nie
 wyświetlaj na demo.
 
+> `share-signing-key` podpisuje **linki** (HMAC). **Nie** jest używany do seal.
+> Seal nie ma klucza: to PBKDF2 na digestcie pliku i id dropa. Nie rotuj klucza,
+> żeby zmienić seal — rotacja dotyczy linków, nie plików.
+
 ### Co jest włączone
 
 - RBAC authorization (nie access policies).

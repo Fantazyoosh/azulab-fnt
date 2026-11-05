@@ -94,7 +94,7 @@ ograniczenia: jeden node, brak cluster autoscalera i brak ingressu z TLS.
 | **SHA-256** | Szybki, jednokierunkowy hash; 256 bitów = 64 znaki hex. | `digest = SHA-256(file)`; wykrywa zmianę pliku. |
 | **PBKDF2** | Celowo wolna funkcja wyprowadzania klucza. | 600 000 iteracji HMAC-SHA256 na digestcie i soli; daje `seal`. |
 | **digest** | Wynik SHA-256. | Szybki odcisk pliku; pole `digest` w `seal.json`. |
-| **seal** | Wynik PBKDF2. | Wolny odcisk pliku; integralność + koszt CPU. **Nie** szyfruje i **nie** jest podpisem. |
+| **seal** | Wynik PBKDF2. | Wolny odcisk pliku; integralność + koszt CPU. **Nie** szyfruje, **nie** jest podpisem i **nie ma klucza**. |
 | **fingerprint** | Krótki SHA-256 **wartości klucza**. | Pokazany w UI, żeby widzieć zmianę klucza bez ujawniania sekretu. Nie ma go w linku. |
 | **HMAC** | Hash z kluczem symetrycznym. | `sig = HMAC-SHA256(key, id.exp.v)`; podpis linku. |
 | **key version** | Niemutowalna wersja sekretu w Key Vault. | `v` w URL; stare linki niosą swoją wersję. |
@@ -123,14 +123,73 @@ ograniczenia: jeden node, brak cluster autoscalera i brak ingressu z TLS.
 - Blob nazywa się zawsze `file`; dzięki temu `../` nie może uciec z kontenera.
 - Limit: 5 MB. Id dropa jest losowe.
 
-### Seal
+### Seal — algorytm, czas i „klucz”
 
 1. `digest = SHA-256(file bytes)`.
-2. `seal = PBKDF2-SHA256(digest, salt=id, iterations=600000, keylen=32)`.
+2. `seal = PBKDF2-HMAC-SHA256(password=digest, salt=id, iterations=600000, keylen=32)`.
 3. Wynik trafia do `seal.json`.
 
-To **nie jest szyfrowanie**. Plik w Blob jest jawny. Seal wykrywa zmianę i daje
-HPA realne obciążenie CPU.
+**Algorytm:** SHA-256, a potem PBKDF2-HMAC-SHA256 (Node `crypto.pbkdf2`,
+`sha256`, output 32 bajty).
+
+**Czas:** na AKS pojedynczy seal to zwykle **300–400 ms** przy 600 000 iteracjach.
+Pod ma domyślnie 4 wątki libuv, więc kilka sealów może iść równolegle. W teście
+12 s loadu dało 34 seale na 2 podach, najwolniejszy ~403 ms.
+
+**Gdzie jest klucz do sealowania?** **Nie ma go.** To jest najważniejsza rzecz:
+
+- PBKDF2 nazywa wejście „password”, ale tutaj „password” to **digest pliku**, nie
+  sekret.
+- Salt to **id dropa**, też nie sekret.
+- Każdy, kto ma plik i id, może policzyć ten sam seal.
+- Seal **nie jest MAC-iem, podpisem ani szyfrowaniem**. To wolny odcisk pliku.
+
+**Kto liczy seal?** Proces Node w podzie, asynchronicznie na libuv threadpool;
+wynik zapisuje do `drops/<id>/seal.json`. Nie robi tego człowiek ani Key Vault.
+
+**Kto tworzy klucz?** Do seal **nikt**, bo go nie ma. `SEAL_ITERATIONS` to
+konfiguracja (domyślnie 600 000, zakres 10 000–2 000 000). Liczba iteracji jest
+zapisywana w `seal.json`; verify używa **zapisanej** wartości, nie bieżącej.
+
+### Klucz, który podpisuje link — nie seal
+
+To jest osobny mechanizm:
+
+- sekret `share-signing-key` w Key Vault,
+- HMAC-SHA256 po `id.exp.v`,
+- wynik `sig` w URL,
+- wersja klucza w URL (`v`), więc rotacja nie łamie starych linków,
+- wyłączenie wersji rewokuje jej linki w ≤60 s.
+
+**Kto tworzy ten klucz?** Administrator/bootstrap, komendą:
+
+```bash
+az keyvault secret set \
+  --vault-name kv-azulab-dev-6mvarl \
+  --name share-signing-key \
+  --value "$(openssl rand -base64 48)"
+```
+
+Terraform zarządza sejfem, ale **nie wartością** sekretu. Aplikacja tylko czyta
+klucz przez managed identity (`Key Vault Secrets User`); nigdy go nie zapisuje
+na dysk ani nie loguje. Rotacja to ta sama komenda — tworzy nową wersję.
+
+**Fingerprint** to krótki SHA-256 **wartości klucza**, pokazany w UI. Nie jest
+kluczem, nie jest sealem i nie jest `sig`.
+
+### Cztery rzeczy, których nie mieszaj
+
+| Rzecz | Z czego powstaje | Czy jest klucz? | Gdzie |
+| --- | --- | --- | --- |
+| **digest** | SHA-256 z bajtów pliku | nie | `seal.json` |
+| **seal** | PBKDF2(digest, id, 600k) | **nie** | `seal.json` |
+| **sig** | HMAC(klucz z Key Vault, `id.exp.v`) | tak | URL |
+| **fingerprint** | SHA-256 wartości klucza, skrócony | nie | UI / config |
+
+Zdanie na rozmowę:
+
+> „Seal nie ma klucza. To PBKDF2 na digestcie pliku i id dropa — każdy może go
+> przeliczyć. Klucz z Key Vault jest tylko do HMAC podpisu linku.”
 
 ### Gdzie jest `seal.json`
 
