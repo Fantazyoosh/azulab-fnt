@@ -1,5 +1,8 @@
 # Demo script — Azulab Drop on AKS
 
+> New to the project? Read [`docs/presentation.md`](presentation.md) first — it
+> explains every term in plain Polish and gives the 12-minute script.
+
 Target: 12–15 minutes. Every command has a one-line "what to say" next to it.
 Run from the repository root. The UI is the visual anchor; the commands are the
 proof behind each card.

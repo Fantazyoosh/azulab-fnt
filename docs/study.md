@@ -7,6 +7,15 @@ jedna komenda.
 Zasada: **read → prove → say**. Najpierw przeczytaj sekcję, potem uruchom
 komendę, na końcu powiedz odpowiedź na głos bez zaglądania.
 
+## Szybka ścieżka dla początkującego (2–3 h)
+
+1. Przeczytaj [`docs/presentation.md`](presentation.md) — słownik, historia
+   projektu i scenariusz 12 minut.
+2. Otwórz UI na AKS i przejdź osiem zakładek, mówiąc na głos po jednym zdaniu.
+3. Odpowiedz na 10 trudnych pytań z końca `presentation.md`.
+4. Dopiero potem wchodź w sesje poniżej — są głębsze i zakładają, że znasz już
+   podstawy z przewodnika.
+
 ---
 
 ## Sesja 1 — RBAC (45 min)
@@ -61,7 +70,7 @@ AzureDiagnostics
 ```
 
 **Powiedz na głos**
-- Siedem etapów cyklu życia sekretu.
+- Cykl życia klucza: bootstrap → runtime → rotacja → rewokacja → failure.
 - Soft delete vs purge protection.
 - Jak sprawdzić, czy sekret jest używany.
 - Gdzie trzymasz wartość sekretu w Terraformie (i dlaczego nie).
@@ -81,12 +90,12 @@ usunięcie; logi pokazują OID tożsamości, która go czytała."
 **Udowodnij**
 ```bash
 # Owner nie czyta danych — 403
-az storage blob list --account-name stazulabdev6mvarl --container-name demo --auth-mode login
+az storage blob list --account-name stazulabdev6mvarl \
+  --container-name drops --auth-mode login
 
-# klucz się wylistuje, ale nie uwierzytelni
-KEY=$(az storage account keys list -n stazulabdev6mvarl -g rg-azulab-dev-polandcentral --query "[0].value" -o tsv)
-az storage blob list --account-name stazulabdev6mvarl --container-name demo --account-key "$KEY"
-# KeyBasedAuthenticationNotPermitted
+# shared key auth jest wyłączony
+az storage account show -n stazulabdev6mvarl -g rg-azulab-dev-polandcentral \
+  --query allowSharedKeyAccess
 
 # wersjonowanie i soft delete
 az storage account blob-service-properties show --account-name stazulabdev6mvarl

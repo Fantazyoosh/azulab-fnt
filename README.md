@@ -141,10 +141,16 @@ The image tag is the commit SHA, never `latest`.
 
 ## 📂 Documentation hub
 
+**New to the project?** Read **[`docs/presentation.md`](docs/presentation.md)**
+first. It starts with a plain-language glossary (AKS, pod, HPA, HMAC, seal,
+PBKDF2, Easy Auth) and then walks through the eight chapters with the exact words
+to say. It is written in Polish.
+
 **Start here:**
 
-- **[Presentation runbook (`docs/presentation.md`)](docs/presentation.md)** — the
-  15-minute pre-flight, the demo order and the fallbacks (Polish).
+- **[Beginner guide + presentation (`docs/presentation.md`)](docs/presentation.md)**
+  — every term explained, the 12-minute script, difficult questions and the
+  15-minute pre-flight (Polish).
 - **[Demo script (`docs/demo-script.md`)](docs/demo-script.md)** — commands and
   "what to say" for each of the eight chapters.
 - **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
@@ -170,8 +176,8 @@ The image tag is the commit SHA, never `latest`.
    — layer by layer, with labs and audit proofs.
 9. **[Entra login (`docs/entra-login.md`)](docs/entra-login.md)** — Easy Auth on
    Container Apps and the one long-lived secret.
-10. **[Study plan (`docs/study.md`)](docs/study.md)** — five sessions, each with a
-    proof command.
+10. **[Study plan (`docs/study.md`)](docs/study.md)** — a beginner path plus five
+    deeper sessions, each with a proof command.
 11. **[References (`docs/references.md`)](docs/references.md)** — Microsoft Learn
     reading list for RBAC, Key Vault, Blob and WAF.
 
