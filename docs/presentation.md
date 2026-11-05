@@ -114,6 +114,146 @@ ograniczenia: jeden node, brak cluster autoscalera i brak ingressu z TLS.
 
 ---
 
+## 2a. Cztery mechanizmy, które musisz umieć
+
+### PDB — PodDisruptionBudget
+
+**Co to jest:** obiekt Kubernetesa, który mówi, ile podów musi zostać
+dostępnych podczas **dobrowolnych** przerw: `kubectl drain`, eviction,
+aktualizacja node’a.
+
+**W projekcie:** 2 repliki, `minAvailable: 1`. Podczas drainu można usunąć
+jeden pod, ale nie oba. Kubernetes używa eviction API i respektuje PDB.
+
+**Czego PDB nie robi:**
+
+- nie chroni przed awarią node’a (involuntary disruption),
+- nie tworzy nowych podów,
+- nie pomoże, gdy nie ma gdzie przesunąć poda.
+
+**Pułapka:** PDB ≠ backup i ≠ HA. Na jednym node drain może się zablokować,
+bo nie ma drugiego node’a, na który można przesunąć poda.
+
+**Zdanie na rozmowę:**
+> „PDB `minAvailable: 1` chroni przed dobrowolnymi przerwami, np. drainem.
+> Nie chroni przed awarią node’a i nie tworzy nowych podów.”
+
+### HPA — HorizontalPodAutoscaler
+
+**Co to jest:** kontroler, który zmienia liczbę replik Deploymentu/ReplicaSetu
+na podstawie metryki — tutaj CPU.
+
+**W projekcie:**
+
+- min 2, max 6,
+- target **60% requestu**,
+- request 100m, limit 300m,
+- metryki z metrics-server,
+- scale-down stabilization 60 s.
+
+**Jak myśli:** jeśli średnie CPU jest powyżej 60% requestu, dodaje pody;
+jeśli poniżej — po oknie stabilizacji usuwa. HPA nie tworzy podów bezpośrednio:
+zmienia `replicas`, a Deployment/ReplicaSet tworzy pody.
+
+**Czego HPA nie robi:**
+
+- nie dodaje node’ów (to cluster autoscaler),
+- nie dodaje CPU,
+- nie pomoże, gdy jesteś na `maxReplicas`.
+
+Na jednym node z 2 vCPU pody dzielą te same rdzenie. HPA dodaje równoległość,
+nie moc — przy 6 podach rośnie throttling i latency. Cluster autoscaler doda
+node tylko wtedy, gdy pody są **Pending**, nie dlatego, że CPU jest wysokie.
+
+**Zdanie na rozmowę:**
+> „HPA skaluje poziomo pody 2–6 na podstawie 60% CPU requestu. Nie dodaje
+> node’ów ani mocy; na jednym node pody dzielą te same 2 vCPU.”
+
+### HMAC — Hash-based Message Authentication Code
+
+**Co to jest:** hash z kluczem. `HMAC-SHA256(key, message)` daje podpis,
+którego nie da się podrobić bez klucza. To **nie szyfrowanie** — wiadomość
+jest widoczna, ale nie da się jej zmienić bez wykrycia.
+
+**W projekcie:**
+
+```text
+sig = base64url(HMAC-SHA256(key, id + "." + exp + "." + keyVersion))
+```
+
+- `key` = `share-signing-key` z Key Vault,
+- `id` = który drop,
+- `exp` = expiry,
+- `v` = wersja klucza,
+- `sig` = podpis w URL.
+
+Serwer bierze klucz z Key Vault, liczy HMAC jeszcze raz i porównuje. Zmiana
+`id`, `exp` albo `v` psuje podpis. Wersja klucza jest w podpisie, więc podpis
+z V3 nie zadziała z V4.
+
+**Czego HMAC nie robi:**
+
+- nie szyfruje linku,
+- nie ukrywa `id` ani expiry,
+- nie dowodzi, kto kliknął link — link jest bearer tokenem.
+
+**HMAC vs podpis cyfrowy:** HMAC jest symetryczny — signer i verifier mają ten
+sam sekret. Podpis cyfrowy (RSA/ECDSA) pozwala weryfikować kluczem publicznym.
+Tutaj tylko nasz serwer weryfikuje, więc HMAC wystarcza.
+
+**Zdanie na rozmowę:**
+> „HMAC to podpis linku kluczem symetrycznym z Key Vault. Serwer liczy go
+> ponownie i porównuje z `sig`; zmiana id, expiry albo wersji klucza psuje
+> podpis. To nie szyfrowanie.”
+
+### PBKDF2 — Password-Based Key Derivation Function 2
+
+**Co to jest:** celowo wolna funkcja wyprowadzania klucza. Powtarza
+HMAC-SHA256 wiele razy, żeby wynik był kosztowny obliczeniowo. Standardowo
+spowalnia ataki na hasła; tutaj używamy jej jako **work factora**.
+
+**W projekcie:**
+
+```text
+digest = SHA-256(file)
+seal   = PBKDF2-HMAC-SHA256(password=digest, salt=id, iterations=600000, keylen=32)
+```
+
+- plik czytamy **raz** i liczymy SHA-256,
+- PBKDF2 wykonuje **600 000 iteracji HMAC-SHA256** na małym digestcie i soli,
+- wynik to 32 bajty = `seal`,
+- czas: ~300–400 ms na AKS,
+- `crypto.pbkdf2` jest async, idzie na libuv threadpool; event loop dalej
+  odpowiada na probe’y.
+
+**Gdzie jest klucz do sealowania?** **Nie ma go.**
+
+- „password” to digest pliku, nie sekret,
+- salt to id dropa, nie sekret,
+- każdy z plikiem i id może policzyć seal,
+- seal nie jest MAC-iem, podpisem ani szyfrowaniem.
+
+Klucz z Key Vault (`share-signing-key`) jest tylko do HMAC linku. Nie rotuj
+go, żeby zmienić seal.
+
+**Dlaczego 600k?** SHA-256 wystarcza do integralności. PBKDF2 dokładamy
+świadomie, żeby seal był kosztowny CPU i HPA miał realny sygnał. To wymóg
+demo, nie bezpieczeństwa pliku.
+
+**Zdanie na rozmowę:**
+> „PBKDF2 to 600 000 iteracji HMAC-SHA256 na digestcie pliku i id dropa.
+> Seal nie ma klucza — każdy może go przeliczyć. Klucz z Key Vault jest tylko
+> do podpisu linku.”
+
+### Cztery zdania do zapamiętania
+
+1. **PDB** chroni przed drainem, nie przed awarią node’a.
+2. **HPA** skaluje pody, nie node’y; na jednym node jest sufit.
+3. **HMAC** podpisuje link kluczem z Key Vault; to nie szyfrowanie.
+4. **PBKDF2** to wolny odcisk pliku; seal nie ma klucza.
+
+---
+
 ## 3. Jak działa produkt — Drop krok po kroku
 
 ### Upload
