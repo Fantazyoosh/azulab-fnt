@@ -452,7 +452,7 @@ gh api repos/Fantazyoosh/azulab-fnt --jq '.security_and_analysis'
 
 ---
 
-## 11. Co pokazać mentorowi w 5 minut
+## 11. Co pokazać w 5 minut
 
 1. **AKS → Workloads**: 2 pody, HPA 2–6; `kubectl get hpa`.
 2. **ACA → Authentication**: Easy Auth, excluded paths `/health`, `/ready`, `/s/*`.

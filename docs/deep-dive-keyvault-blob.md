@@ -1,6 +1,6 @@
 # Deep dive: Key Vault + Blob Storage
 
-Mentor powiedział: wybierz **dwa komponenty** i poznaj na nich bezpieczeństwo
+W projekcie wybrano **dwa komponenty** i poznano na nich bezpieczeństwo
 end to end. Te dwa są w ścieżce danych aplikacji i pokazują dwa różne modele
 data plane: sekrety i bloby.
 
@@ -44,7 +44,7 @@ data plane: sekrety i bloby.
 
 ## 1.4 Dowód z logów — „kto przeczytał sekret?"
 
-To jest odpowiedź na pytanie mentora „jak sprawdzić, czy sekret jest używany".
+To jest odpowiedź na pytanie „jak sprawdzić, czy sekret jest używany”.
 Zapytanie KQL (zweryfikowane na żywym workspace):
 
 ```kusto

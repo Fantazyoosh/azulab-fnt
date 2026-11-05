@@ -1,9 +1,8 @@
-# References — the mentor's reading list
+# References — the project reading list
 
-During the 2026-11-01 call the mentor shared links on screen. The transcript
-captured the topics, not the URLs. The list below is the official Microsoft Learn
-documentation that matches each topic he raised; every link was checked and
-returns HTTP 200 on 2026-11-03.
+The list below is the official Microsoft Learn documentation that matches the
+topics used in this project; every link was checked and returns HTTP 200 on
+2026-11-03.
 
 Read with a question in hand. After each page, write one sentence in your own
 words and run one command that proves it.
@@ -65,7 +64,7 @@ purge protection refuse it.
 
 | Link | What it answers |
 | --- | --- |
-| [Security recommendations for Blob Storage](https://learn.microsoft.com/en-us/azure/storage/blobs/security-recommendations) | the checklist the mentor was describing |
+| [Security recommendations for Blob Storage](https://learn.microsoft.com/en-us/azure/storage/blobs/security-recommendations) | the Blob security checklist used in this project |
 | [Authorize access to data](https://learn.microsoft.com/en-us/azure/storage/common/authorize-data-access) | Entra ID, SAS, shared key, anonymous — when each is valid |
 | [Prevent shared key authorization](https://learn.microsoft.com/en-us/azure/storage/common/shared-key-authorization-prevent) | what breaks when you disable it |
 | [Configure network security](https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security) | firewall, IP rules, trusted services |

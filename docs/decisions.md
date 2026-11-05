@@ -8,8 +8,9 @@ is.
 
 ## ADR-001 — Two runtimes instead of one
 
-**Context.** Container Apps is the cheapest way to keep a public demo. The mentor
-requirement is a real Kubernetes demo, and Kubernetes is the industry baseline.
+**Context.** Container Apps is the cheapest way to keep a public demo. The
+project also needs a real Kubernetes demo, and Kubernetes is the industry
+baseline.
 
 **Decision.** Run the same image on both. Container Apps stays as the serverless
 runtime; AKS is the orchestrated one.
@@ -159,7 +160,7 @@ one terminal.
 **Decision.** Standard LoadBalancer with an HTTP health probe.
 
 **Consequences.**
-- A stable public URL for the mentor call, reachable from any device.
+- A stable public URL for the demo, reachable from any device.
 - ~0.72 $/day while it exists.
 - Must be deleted (`kubectl delete svc azulab`) before `az aks stop` to release
   the public IP.
