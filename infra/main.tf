@@ -219,10 +219,6 @@ resource "azurerm_container_app" "app" {
         value = azurerm_key_vault.main.vault_uri
       }
       env {
-        name  = "SECRET_NAME"
-        value = "app-message"
-      }
-      env {
         name  = "STORAGE_ACCOUNT_URL"
         value = "https://${azurerm_storage_account.main.name}.blob.core.windows.net"
       }

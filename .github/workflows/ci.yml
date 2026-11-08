@@ -45,6 +45,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      # The AKS node is Arm64 (Standard_D2pls_v6, the cheapest allowed SKU).
+      # QEMU makes the arm64 image build possible on the amd64 GitHub runner.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Resolve lowercase image name
         id: image
@@ -66,6 +69,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./app
+          # One tag, two architectures: ACA runs amd64, the AKS node is Arm64.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

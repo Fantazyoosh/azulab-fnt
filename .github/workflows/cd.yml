@@ -80,6 +80,22 @@ jobs:
           echo "smoke test failed: /health or /ready did not return 200"
           exit 1
 
+      # The cost guard stops AKS at night and on weekends. A merge must still
+      # deploy, so start the cluster first instead of failing the pipeline.
+      - name: Ensure AKS is running
+        run: |
+          set -euo pipefail
+          STATE=$(az aks show \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AKS_CLUSTER }}" \
+            --query powerState.code -o tsv)
+          if [ "$STATE" != "Running" ]; then
+            echo "AKS is $STATE; starting it (the cost guard stops it at night)."
+            az aks start \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ vars.AKS_CLUSTER }}"
+          fi
+
       # Same image, second runtime. Container Apps and AKS track the same
       # immutable tag on every merge; the manifests in k8s/ are the baseline,
       # CD injects the tag produced by this run.
@@ -90,6 +106,11 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --name "${{ vars.AKS_CLUSTER }}" \
             --overwrite-existing
+          # A stopped cluster can lose its LoadBalancer Service; recreate it
+          # before the rollout so the smoke test has an address to hit.
+          if ! kubectl -n azulab get service azulab >/dev/null 2>&1; then
+            kubectl apply -f k8s/service.yaml
+          fi
           # The HPA owns the replica count. Apply it before the rollout so the
           # new ReplicaSet starts at the intended minimum instead of one pod.
           kubectl apply -f k8s/hpa.yaml

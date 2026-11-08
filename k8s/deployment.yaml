@@ -84,8 +84,6 @@ spec:
               value: ghcr.io/fantazyoosh/azulab-fnt:1c4f897b150a820e5700e6aebdf4cdd63255f57b
             - name: KEY_VAULT_URL
               value: "https://kv-azulab-dev-6mvarl.vault.azure.net/"
-            - name: SECRET_NAME
-              value: "app-message"
             - name: STORAGE_ACCOUNT_URL
               value: "https://stazulabdev6mvarl.blob.core.windows.net"
             - name: CONTAINER_NAME

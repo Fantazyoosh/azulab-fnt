@@ -1,0 +1,76 @@
+name: AKS schedule (cost guard)
+
+# The node is the only meaningful variable cost on the platform. Keep the
+# cluster up during the working day and off overnight and at weekends.
+#
+# Cron is UTC (Poland is UTC+1 in winter, UTC+2 in summer):
+#   21:00 UTC Sun-Thu -> 22:00/23:00 local, off before the next working day
+#   05:00 UTC Mon-Fri -> 06:00/07:00 local, on before the working day
+#
+# A merge is never blocked by the schedule: the CD workflow starts the cluster
+# if it is stopped before deploying.
+
+on:
+  schedule:
+    - cron: '0 21 * * 0-4'
+    - cron: '0 5 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "stop or start"
+        required: true
+        type: choice
+        options:
+          - stop
+          - start
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: aks-schedule
+  cancel-in-progress: false
+
+jobs:
+  toggle:
+    name: "AKS cost guard"
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: false
+
+      - name: Stop or start AKS
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ACTION="${{ github.event.inputs.action }}"
+          elif [ "${{ github.event.schedule }}" = "0 21 * * 0-4" ]; then
+            ACTION=stop
+          else
+            ACTION=start
+          fi
+
+          STATE=$(az aks show \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AKS_CLUSTER }}" \
+            --query powerState.code -o tsv)
+          echo "action=$ACTION state=$STATE"
+
+          if [ "$ACTION" = "stop" ] && [ "$STATE" = "Running" ]; then
+            az aks stop \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ vars.AKS_CLUSTER }}"
+          elif [ "$ACTION" = "start" ] && [ "$STATE" = "Stopped" ]; then
+            az aks start \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ vars.AKS_CLUSTER }}"
+          else
+            echo "Nothing to do: already $STATE."
+          fi
