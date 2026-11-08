@@ -22,13 +22,13 @@ export default {
       header(
         "Chapter 01 · Drop",
         "A file, a seal, a link.",
-        "Upload any file. The app stores it in Blob Storage, computes a deliberately slow seal, and signs a link that expires. No account, no session, no shared key."
+        "Upload any file. The app stores it in Blob Storage, computes a cheap integrity seal, and signs a link that expires. No account, no session, no shared key."
       ),
       el(
         "div",
         { class: "mt-5 grid gap-4 sm:grid-cols-3" },
         step("01", "Upload", "Raw bytes go to Blob under a random id; the original name stays metadata."),
-        step("02", "Seal", "SHA-256 digest plus PBKDF2-SHA256 work factor. Recomputing it is real CPU."),
+        step("02", "Seal", "SHA-256 digest, salted with the drop id. Cheap on purpose; CPU work is opt-in on the Debug tab."),
         step("03", "Share", "HMAC over id, expiry and key version. The signature is the credential.")
       )
     );
@@ -133,7 +133,7 @@ export default {
     async function seal(item, button) {
       await run(button, "Sealing…", async () => {
         const record = await api.drops.seal(item.id);
-        toast(`Sealed ${item.name} in ${fmt.ms(record.ms)} · ${fmt.number(record.iterations)} iterations`, "ok");
+        toast(`Sealed ${item.name} in ${fmt.ms(record.ms)} · ${record.algorithm}`, "ok");
         await refresh();
       });
     }
@@ -226,7 +226,7 @@ export default {
           "div",
           { class: "mt-2" },
           statRow("Algorithm", item.seal.algorithm),
-          statRow("Iterations", fmt.number(item.seal.iterations)),
+          statRow("Iterations", item.seal.iterations ? fmt.number(item.seal.iterations) : "none (cheap seal)"),
           statRow("sha256", item.seal.digest),
           statRow("seal", item.seal.seal),
           statRow("Sealed at", fmt.time(item.seal.sealedAt)),

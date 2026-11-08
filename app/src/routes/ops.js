@@ -4,7 +4,23 @@
 // and return whatever Azure says, so "allowed" and "denied" are not claims in a
 // slide — they are status codes produced at request time.
 
+const crypto = require("node:crypto");
 const express = require("express");
+
+const { SEAL_ALGORITHM, workFactor } = require("../seal");
+
+// The load endpoint is a demo, not a benchmark service. Two caps keep a single
+// request from pinning the threadpool for minutes: per-round iterations and
+// total work across all rounds.
+const LOAD_MAX_ITERATIONS = 2000000;
+const LOAD_MAX_ROUNDS = 32;
+const LOAD_MAX_WORK = 8000000;
+
+function clampInt(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.trunc(n), min), max);
+}
 
 function decodeJwtPayload(token) {
   const part = String(token).split(".")[1];
@@ -54,7 +70,9 @@ function createOpsRouter({ cfg, logger, keys, store, credential }) {
       keyVersion: key ? key.version : null,
       keyFingerprint: key ? key.fingerprint : null,
       keyLoadedAt: key ? key.loadedAt : null,
-      sealIterations: cfg.sealIterations,
+      sealAlgorithm: SEAL_ALGORITHM,
+      debugLoadIterations: cfg.debugLoadIterations,
+      debugEndpoints: cfg.enableDebugEndpoints,
       maxUploadBytes: cfg.maxUploadBytes,
       shareTtlSeconds: cfg.shareTtlSeconds,
     });
@@ -135,6 +153,39 @@ function createOpsRouter({ cfg, logger, keys, store, credential }) {
     logger.warn({ pod }, "crash requested");
     res.json({ crashing: true, pod });
     res.on("finish", () => setTimeout(() => process.exit(1), 50));
+  });
+
+  // The only place where the app burns CPU on purpose. The product seal is
+  // cheap; this endpoint exists so the Debug chapter can push real work
+  // through the libuv threadpool and let the HPA react. It never touches
+  // storage, so a load run cannot flood Blob with seal records.
+  router.post("/debug/load", async (req, res) => {
+    if (!cfg.enableDebugEndpoints) return res.status(404).json({ error: "not_found" });
+
+    const iterations = clampInt(req.body && req.body.iterations, cfg.debugLoadIterations, 10000, LOAD_MAX_ITERATIONS);
+    const rounds = clampInt(req.body && req.body.rounds, 1, 1, LOAD_MAX_ROUNDS);
+    if (iterations * rounds > LOAD_MAX_WORK) {
+      return res.status(400).json({ error: "too_much_work", maxWork: LOAD_MAX_WORK, iterations, rounds });
+    }
+
+    const pod = process.env.HOSTNAME || "local";
+    const startedAt = Date.now();
+    try {
+      // Parallel work lands on separate libuv threads, which is exactly the
+      // shape a normal request burst has. The event loop stays free to answer
+      // health checks while the CPU is saturated.
+      await Promise.all(
+        Array.from({ length: rounds }, (_, index) =>
+          workFactor(crypto.randomUUID(), `debug-load-${index}`, iterations)
+        )
+      );
+      const ms = Date.now() - startedAt;
+      logger.warn({ pod, iterations, rounds, ms }, "debug load");
+      return res.json({ ok: true, pod, iterations, rounds, ms });
+    } catch (err) {
+      logger.error({ err: err.message }, "debug load failed");
+      return res.status(500).json({ error: "load_failed", message: err.message });
+    }
   });
 
   return router;

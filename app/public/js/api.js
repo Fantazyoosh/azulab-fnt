@@ -123,6 +123,14 @@ export const api = {
   },
 
   debug: {
+    // CPU work on demand: iterations default to DEBUG_LOAD_ITERATIONS on the
+    // server; rounds run in parallel on the libuv threadpool.
+    load: (iterations, rounds = 1) =>
+      request("/debug/load", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(iterations ? { iterations, rounds } : { rounds }),
+      }),
     crash: () => request("/debug/crash", { method: "POST" }),
     // Returns the pod that accepted the drain so the UI can name it.
     drain: async (ttlSeconds = 60) => {

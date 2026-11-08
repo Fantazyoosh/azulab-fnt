@@ -1,4 +1,4 @@
-// Chapter 08 — Delivery.
+// Chapter 07 — Delivery.
 //
 // One commit, one image, two runtimes. The map is the same system the previous
 // chapters probe; here it is in one picture, with the live artifact beside it.
@@ -84,7 +84,7 @@ export default {
 
     const intro = card(
       header(
-        "Chapter 08 · Delivery",
+        "Chapter 07 · Delivery",
         "One image. Two runtimes.",
         "Every merge to main produces one immutable artifact. Container Apps and AKS pull the same tag, so \"it works on my machine\" is the same machine."
       )

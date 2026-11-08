@@ -2,18 +2,22 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  LEGACY_SEAL_ALGORITHM,
+  SEAL_ALGORITHM,
   sealBuffer,
   sharePath,
   sha256,
   signLink,
   verifyLink,
   verifySeal,
+  workFactor,
 } = require("../src/seal");
 
 const ID = "abcdefghijkl";
 const KEY = "test-signing-key";
 const VERSION = "version-1";
-const ITERATIONS = 10000;
+// Only used to build a record in the old PBKDF2 format.
+const LEGACY_ITERATIONS = 10000;
 
 test("sha256 matches the known vector", () => {
   assert.equal(
@@ -22,33 +26,49 @@ test("sha256 matches the known vector", () => {
   );
 });
 
-test("seal is deterministic for the same input and salt", async () => {
-  const a = await sealBuffer(Buffer.from("hello"), { id: ID, iterations: ITERATIONS });
-  const b = await sealBuffer(Buffer.from("hello"), { id: ID, iterations: ITERATIONS });
+test("the product seal is cheap and deterministic", async () => {
+  const a = await sealBuffer(Buffer.from("hello"), { id: ID });
+  const b = await sealBuffer(Buffer.from("hello"), { id: ID });
   assert.equal(a.seal, b.seal);
   assert.equal(a.digest, b.digest);
-  assert.equal(a.iterations, ITERATIONS);
+  assert.equal(a.algorithm, SEAL_ALGORITHM);
+  assert.equal(a.iterations, 0);
 });
 
 test("seal changes when the salt or one byte of content changes", async () => {
-  const base = await sealBuffer(Buffer.from("hello"), { id: ID, iterations: ITERATIONS });
-  const otherSalt = await sealBuffer(Buffer.from("hello"), { id: "zzzzzzzzzzzz", iterations: ITERATIONS });
-  const otherContent = await sealBuffer(Buffer.from("hellp"), { id: ID, iterations: ITERATIONS });
+  const base = await sealBuffer(Buffer.from("hello"), { id: ID });
+  const otherSalt = await sealBuffer(Buffer.from("hello"), { id: "zzzzzzzzzzzz" });
+  const otherContent = await sealBuffer(Buffer.from("hellp"), { id: ID });
   assert.notEqual(base.seal, otherSalt.seal);
   assert.notEqual(base.seal, otherContent.seal);
 });
 
 test("verifySeal accepts the original bytes", async () => {
   const buffer = Buffer.from("payload");
-  const record = { ...(await sealBuffer(buffer, { id: ID, iterations: ITERATIONS })), id: ID };
+  const record = { ...(await sealBuffer(buffer, { id: ID })), id: ID };
   const result = await verifySeal(buffer, record);
   assert.equal(result.ok, true);
 });
 
 test("verifySeal rejects tampered bytes", async () => {
-  const record = { ...(await sealBuffer(Buffer.from("payload"), { id: ID, iterations: ITERATIONS })), id: ID };
+  const record = { ...(await sealBuffer(Buffer.from("payload"), { id: ID })), id: ID };
   const result = await verifySeal(Buffer.from("payloaD"), record);
   assert.equal(result.ok, false);
+});
+
+test("verifySeal still accepts a legacy PBKDF2 record", async () => {
+  const buffer = Buffer.from("payload");
+  const digest = sha256(buffer);
+  const derived = await workFactor(digest, ID, LEGACY_ITERATIONS);
+  const record = {
+    id: ID,
+    algorithm: LEGACY_SEAL_ALGORITHM,
+    iterations: LEGACY_ITERATIONS,
+    digest,
+    seal: derived.toString("hex"),
+  };
+  assert.equal((await verifySeal(buffer, record)).ok, true);
+  assert.equal((await verifySeal(Buffer.from("payloaD"), record)).ok, false);
 });
 
 test("verifySeal rejects an unknown algorithm", async () => {

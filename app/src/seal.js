@@ -1,9 +1,15 @@
 // Integrity seals and signed share links.
 //
-// A seal is a deliberately slow fingerprint of a file. SHA-256 gives the
-// digest; PBKDF2 stretches it with a work factor. Recomputing it is real CPU
-// work, which is exactly what the autoscaling demo needs, and changing a single
-// byte changes the result.
+// A seal proves that a file did not change: SHA-256 over the bytes, then a
+// salted SHA-256 over the digest and the drop id. Both steps are cheap, because
+// a seal is part of the product path — it must not burn CPU on every upload.
+//
+// PBKDF2 still exists, but only as a work factor for the Debug chapter:
+// POST /debug/load spends real CPU on the libuv threadpool so the HPA has a
+// signal to react to. The product path never calls it.
+//
+// Seals written by earlier builds used PBKDF2-SHA256 over the digest;
+// verifySeal recomputes those too, so old drops keep verifying.
 //
 // A share link is an HMAC over (id, expiry, key version). The key lives in Key
 // Vault and its version travels in the URL, so rotating the secret does not
@@ -16,7 +22,8 @@ const { promisify } = require("node:util");
 
 const pbkdf2 = promisify(crypto.pbkdf2);
 
-const SEAL_ALGORITHM = "PBKDF2-SHA256";
+const SEAL_ALGORITHM = "SHA256-SALTED";
+const LEGACY_SEAL_ALGORITHM = "PBKDF2-SHA256";
 const SEAL_KEY_BYTES = 32;
 
 function sha256(buffer) {
@@ -35,28 +42,46 @@ function safeEqual(a, b) {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-async function sealBuffer(buffer, { id, iterations }) {
+// The cheap seal: the file digest is already unique, the id is the salt.
+function saltedSeal(digest, id) {
+  return crypto.createHash("sha256").update(`${digest}:${id}`).digest("hex");
+}
+
+async function sealBuffer(buffer, { id }) {
   const startedAt = Date.now();
   const digest = sha256(buffer);
-  const derived = await pbkdf2(digest, id, iterations, SEAL_KEY_BYTES, "sha256");
   return {
     algorithm: SEAL_ALGORITHM,
-    iterations,
+    iterations: 0,
     digest,
-    seal: derived.toString("hex"),
+    seal: saltedSeal(digest, id),
     ms: Date.now() - startedAt,
   };
 }
 
+// PBKDF2 is used in exactly two places: /debug/load (the HPA demo) and
+// verifySeal for records written before the seal became cheap.
+function workFactor(seed, salt, iterations) {
+  return pbkdf2(seed, salt, iterations, SEAL_KEY_BYTES, "sha256");
+}
+
 async function verifySeal(buffer, record) {
-  if (!record || record.algorithm !== SEAL_ALGORITHM || !Number.isInteger(record.iterations)) {
-    return { ok: false, reason: "unsupported_seal" };
-  }
+  if (!record) return { ok: false, reason: "unsupported_seal" };
   const startedAt = Date.now();
   const digest = sha256(buffer);
-  const derived = await pbkdf2(digest, record.id, record.iterations, SEAL_KEY_BYTES, "sha256");
-  const ok = safeEqual(derived.toString("hex"), record.seal) && safeEqual(digest, record.digest);
-  return { ok, digest, ms: Date.now() - startedAt };
+
+  if (record.algorithm === SEAL_ALGORITHM) {
+    const ok = safeEqual(digest, record.digest) && safeEqual(saltedSeal(digest, record.id), record.seal);
+    return { ok, digest, ms: Date.now() - startedAt };
+  }
+
+  if (record.algorithm === LEGACY_SEAL_ALGORITHM && Number.isInteger(record.iterations)) {
+    const derived = await workFactor(digest, record.id, record.iterations);
+    const ok = safeEqual(digest, record.digest) && safeEqual(derived.toString("hex"), record.seal);
+    return { ok, digest, ms: Date.now() - startedAt };
+  }
+
+  return { ok: false, reason: "unsupported_seal" };
 }
 
 function signLink({ id, exp, keyVersion, key }) {
@@ -79,6 +104,7 @@ function sharePath({ id, exp, keyVersion, sig }) {
 }
 
 module.exports = {
+  LEGACY_SEAL_ALGORITHM,
   SEAL_ALGORITHM,
   fingerprint,
   safeEqual,
@@ -88,4 +114,5 @@ module.exports = {
   signLink,
   verifyLink,
   verifySeal,
+  workFactor,
 };

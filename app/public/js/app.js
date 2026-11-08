@@ -11,12 +11,15 @@ import dropTab from "./tabs/drop.js";
 import blobTab from "./tabs/blob.js";
 import rbacTab from "./tabs/rbac.js";
 import vaultTab from "./tabs/vault.js";
-import scalingTab from "./tabs/scaling.js";
 import costTab from "./tabs/cost.js";
 import availabilityTab from "./tabs/availability.js";
 import deliveryTab from "./tabs/delivery.js";
+import debugTab from "./tabs/debug.js";
 
-const TABS = [dropTab, blobTab, rbacTab, vaultTab, scalingTab, costTab, availabilityTab, deliveryTab];
+// Seven chapters tell the product story; Debug is deliberately last and
+// unnumbered. It holds the knobs that exist to break or load the system, not
+// the argument the presentation is making.
+const TABS = [dropTab, blobTab, rbacTab, vaultTab, costTab, availabilityTab, deliveryTab, debugTab];
 const MOUNTED = new Set();
 const REFRESH = new Map();
 

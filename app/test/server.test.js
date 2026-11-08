@@ -50,35 +50,12 @@ test("ready reflects missing storage/keyvault gracefully", async () => {
   assert.ok(r.body.checks, "checks present");
 });
 
-test("message endpoint returns fallback message", async () => {
-  const app = buildApp();
-  const r = await request(app, "GET", "/api/message");
-  assert.equal(r.status, 200);
-  assert.ok(typeof r.body.message === "string" && r.body.message.length > 0);
-});
-
 test("metrics endpoint returns snapshot", async () => {
   const app = buildApp();
   await request(app, "GET", "/health");
   const r = await request(app, "GET", "/metrics");
   assert.equal(r.status, 200);
   assert.ok(r.body.requests >= 1);
-});
-
-test("blob upload rejects invalid names and missing storage", async () => {
-  const app = buildApp();
-  const r1 = await request(app, "POST", "/api/blobs", { name: "../evil", content: "x" });
-  assert.equal(r1.status, 400);
-  const r2 = await request(app, "POST", "/api/blobs", { name: "ok.txt", content: "x" });
-  // No storage configured in tests -> 503, never 500 with a leak.
-  assert.equal(r2.status, 503);
-});
-
-test("blob upload enforces size limit", async () => {
-  const cfg = { ...require("../src/config").getConfig(), storageAccountUrl: "https://x.blob.core.windows.net", maxUploadBytes: 4 };
-  const app = buildApp(cfg);
-  const r = await request(app, "POST", "/api/blobs", { name: "big.txt", content: "too large" });
-  assert.equal(r.status, 413);
 });
 
 test("version exposes runtime identity and every response carries x-pod-name", async () => {
@@ -96,6 +73,32 @@ test("debug readiness switch is disabled by default", async () => {
   const app = buildApp();
   const r = await request(app, "POST", "/debug/fail-readiness");
   assert.equal(r.status, 404);
+});
+
+test("debug load is disabled by default", async () => {
+  const app = buildApp();
+  const r = await request(app, "POST", "/debug/load", { iterations: 10000, rounds: 1 });
+  assert.equal(r.status, 404);
+});
+
+test("debug load burns CPU without touching the store", async () => {
+  const cfg = { ...require("../src/config").getConfig(), enableDebugEndpoints: true };
+  const app = buildApp(cfg);
+  const r = await request(app, "POST", "/debug/load", { iterations: 10000, rounds: 2 });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.iterations, 10000);
+  assert.equal(r.body.rounds, 2);
+  assert.ok(r.body.ms >= 0);
+  assert.ok(typeof r.body.pod === "string" && r.body.pod.length > 0);
+});
+
+test("debug load refuses unbounded work", async () => {
+  const cfg = { ...require("../src/config").getConfig(), enableDebugEndpoints: true };
+  const app = buildApp(cfg);
+  const r = await request(app, "POST", "/debug/load", { iterations: 2000000, rounds: 32 });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "too_much_work");
 });
 
 test("forced readiness failure returns 503 while health stays 200", async () => {

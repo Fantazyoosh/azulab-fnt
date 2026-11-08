@@ -9,7 +9,6 @@
 // Runs locally with `npm start` and in Azure Container Apps.
 
 const { DefaultAzureCredential } = require("@azure/identity");
-const { SecretClient } = require("@azure/keyvault-secrets");
 const { BlobServiceClient } = require("@azure/storage-blob");
 const crypto = require("node:crypto");
 const express = require("express");
@@ -35,10 +34,6 @@ function createCredential(cfg = {}) {
 function createState(cfg) {
   return {
     cfg,
-    secretCache: process.env.APP_MESSAGE || "hello from azulab (no Key Vault configured)",
-    secretLoaded: false,
-    secretError: null,
-    ready: false,
     shuttingDown: false,
     // Readiness is a *runtime* signal: the pod can be alive but unable to serve
     // traffic (dependency down, or an operator forcing it out of rotation).
@@ -99,47 +94,6 @@ function readinessForced(state) {
     return false;
   }
   return true;
-}
-
-async function loadSecret(cfg, logger, state) {
-  const s = state || createState(cfg);
-  if (!cfg.keyVaultUrl) {
-    s.secretLoaded = true;
-    return s.secretCache;
-  }
-  try {
-    const credential = createCredential(cfg);
-    const client = new SecretClient(cfg.keyVaultUrl, credential);
-    const sec = await client.getSecret(cfg.secretName);
-    s.secretCache = sec.value || s.secretCache;
-    s.secretLoaded = true;
-    s.secretError = null;
-    return s.secretCache;
-  } catch (err) {
-    s.secretError = err.message;
-    s.secretLoaded = false;
-    logger.error({ err: err.message }, "keyvault secret load failed");
-    return s.secretCache;
-  }
-}
-
-function blobNameValid(name) {
-  return typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name);
-}
-
-// Key Vault is a network dependency that can be slow at pod start. A single
-// attempt would leave /ready at 503 forever, so retry with capped exponential
-// backoff. Failures are logged but never crash the process.
-async function loadSecretWithRetry(cfg, logger, state, attempts = 5) {
-  for (let i = 0; i < attempts; i += 1) {
-    await loadSecret(cfg, logger, state);
-    if (state.secretLoaded) return state.secretCache;
-    if (i === attempts - 1) break;
-    const delay = Math.min(1000 * 2 ** i, 15000);
-    logger.warn({ attempt: i + 1, delayMs: delay }, "retrying keyvault secret load");
-    await new Promise((resolve) => setTimeout(resolve, delay));
-  }
-  return state.secretCache;
 }
 
 function getBlobClient(cfg) {
@@ -286,119 +240,6 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
     });
   });
 
-  app.get("/api/message", async (_req, res) => {
-    if (!cfg.storageAccountUrl) {
-      return res.json({ message: `${state.secretCache} (Sekret z Vault)`, source: "vault" });
-    }
-    try {
-      const { container } = getBlobClient(cfg);
-      const block = container.getBlockBlobClient("current_message.txt");
-      const download = await block.download(0);
-      let content = "";
-      for await (const chunk of download.readableStreamBody) {
-        content += chunk.toString();
-      }
-      res.json({ message: content || state.secretCache, source: "blob" });
-    } catch (err) {
-      res.json({ message: `${state.secretCache} (Sekret z Vault)`, source: "vault" });
-    }
-  });
-
-  app.post("/api/message", async (req, res) => {
-    const { message } = req.body || {};
-    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
-
-    try {
-      const { container } = getBlobClient(cfg);
-      const block = container.getBlockBlobClient("current_message.txt");
-      await container.createIfNotExists();
-
-      if (!message || typeof message !== "string" || message.trim() === "") {
-        await block.deleteIfExists();
-        return res.status(200).json({ success: true, message: "Message cleared, falling back to Key Vault" });
-      }
-
-      await block.uploadData(Buffer.from(message, "utf8"), {
-        blobHTTPHeaders: { blobContentType: "text/plain; charset=utf-8" },
-      });
-      res.status(201).json({ success: true, message: "Message updated in cloud storage" });
-    } catch (err) {
-      res.status(500).json({ error: "update_failed", message: err.message });
-    }
-  });
-
-  app.get("/api/blobs", async (_req, res) => {
-    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
-    try {
-      const { container } = getBlobClient(cfg);
-      const items = [];
-      for await (const b of container.listBlobsFlat()) items.push(b.name);
-      res.json({ container: cfg.containerName, blobs: items });
-    } catch (err) {
-      logger.error({ err: err.message, stack: err.stack }, "blob list failed");
-
-      res.status(500).json({ error: "blob_list_failed", message: err.message });
-    }
-  });
-
-  app.post("/api/blobs", async (req, res) => {
-    const { name, content } = req.body || {};
-    if (!blobNameValid(name)) {
-      return res.status(400).json({ error: "invalid_name", message: "name must be 1-128 safe chars" });
-    }
-    const body = content === undefined || content === null ? "" : String(content);
-    if (Buffer.byteLength(body, "utf8") > cfg.maxUploadBytes) {
-      return res.status(413).json({ error: "too_large", message: `max ${cfg.maxUploadBytes} bytes` });
-    }
-    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
-
-    try {
-      const { container } = getBlobClient(cfg);
-      const block = container.getBlockBlobClient(name);
-      await container.createIfNotExists();
-      await block.uploadData(Buffer.from(body, "utf8"), {
-        blobHTTPHeaders: { blobContentType: "text/plain; charset=utf-8" },
-      });
-      res.status(201).json({ name, container: cfg.containerName, bytes: Buffer.byteLength(body, "utf8") });
-    } catch (err) {
-      logger.error({ err: err.message, name }, "blob upload failed");
-      res.status(500).json({ error: "blob_upload_failed", message: err.message });
-    }
-  });
-
-  app.get("/api/blobs/:name", async (req, res) => {
-    const name = decodeURIComponent(req.params.name);
-    if (!blobNameValid(name)) return res.status(400).json({ error: "invalid_name" });
-    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
-
-    try {
-      const { container } = getBlobClient(cfg);
-      const block = container.getBlockBlobClient(name);
-      const download = await block.download(0);
-      res.type("text/plain; charset=utf-8");
-      download.readableStreamBody.pipe(res);
-    } catch (err) {
-      const status = err.statusCode === 404 ? 404 : 500;
-      res.status(status).json({ error: status === 404 ? "not_found" : "blob_download_failed", message: err.message });
-    }
-  });
-
-  app.delete("/api/blobs/:name", async (req, res) => {
-    const name = decodeURIComponent(req.params.name);
-    if (!blobNameValid(name)) return res.status(400).json({ error: "invalid_name" });
-    if (!cfg.storageAccountUrl) return res.status(503).json({ error: "storage not configured" });
-
-    try {
-      const { container } = getBlobClient(cfg);
-      const block = container.getBlockBlobClient(name);
-      await block.deleteIfExists();
-      res.status(204).send();
-    } catch (err) {
-      logger.error({ err: err.message, name }, "blob delete failed");
-      res.status(500).json({ error: "blob_delete_failed", message: err.message });
-    }
-  });
-
   app.get("/metrics", (_req, res) => {
     res.json(metrics.snapshot());
   });
@@ -424,10 +265,6 @@ function buildApp(cfg = getConfig(), logger = createLogger(cfg.logLevel), state 
 
 function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   const state = createState(cfg);
-  // Load the secret before reporting ready. Retries keep a slow Key Vault from
-  // leaving the pod permanently unready; a hard failure still degrades rather
-  // than crashes, so the pod stays alive for debugging.
-  loadSecretWithRetry(cfg, logger, state).catch((e) => logger.error({ err: e.message }, "loadSecret rejected"));
   const app = buildApp(cfg, logger, state);
   // Warm the signing key so the first share does not pay the Key Vault round
   // trip. Failure is not fatal: /ready reports "pending" and retries.
@@ -442,7 +279,6 @@ function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
     if (shuttingDown) return;
     shuttingDown = true;
     state.shuttingDown = true;
-    state.ready = false;
     logger.info({ signal }, "shutting down gracefully");
     server.close(() => {
       logger.info("http server closed");
@@ -457,14 +293,10 @@ function start(cfg = getConfig(), logger = createLogger(cfg.logLevel)) {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 
-  server.on("listening", () => {
-    state.ready = !state.secretError;
-  });
-
   return server;
 }
 
-module.exports = { buildApp, loadSecret, loadSecretWithRetry, start, createState, getConfig };
+module.exports = { buildApp, start, createState, getConfig };
 
 if (require.main === module) {
   start();

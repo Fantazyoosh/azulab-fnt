@@ -1,4 +1,4 @@
-// Chapter 07 — Availability.
+// Chapter 06 — Availability.
 //
 // Two replicas, readiness that understands dependencies, and a chaos button.
 // The page reports what actually happened: which pod died, which one answered,
@@ -24,7 +24,7 @@ export default {
 
     const intro = card(
       header(
-        "Chapter 07 · Availability",
+        "Chapter 06 · Availability",
         "Failure is a feature.",
         "Kubernetes does not prevent failure; it makes failure boring. The buttons below crash or drain the process that served this page, then watch what the Service does."
       )

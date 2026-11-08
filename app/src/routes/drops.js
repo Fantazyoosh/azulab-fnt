@@ -160,7 +160,9 @@ function createDropsRouter({ cfg, logger, store, keys }) {
       const buffer = meta ? await store.getFile(id) : null;
       if (!meta || !buffer) return res.status(404).json({ error: "not_found" });
 
-      const seal = await sealBuffer(buffer, { id, iterations: cfg.sealIterations });
+      // Cheap by design: the product path must not spend CPU on upload. The
+      // expensive PBKDF2 work lives in /debug/load, where it is opt-in.
+      const seal = await sealBuffer(buffer, { id });
       const record = {
         ...seal,
         id,
@@ -183,7 +185,7 @@ function createDropsRouter({ cfg, logger, store, keys }) {
       };
       await store.putMeta(id, updated);
 
-      logger.info({ id, iterations: record.iterations, ms: record.ms }, "drop sealed");
+      logger.info({ id, algorithm: record.algorithm, ms: record.ms }, "drop sealed");
       res.json({ ok: true, ...record });
     })
   );

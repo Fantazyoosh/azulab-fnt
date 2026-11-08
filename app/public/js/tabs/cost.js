@@ -1,4 +1,4 @@
-// Chapter 06 — Cost.
+// Chapter 05 — Cost.
 //
 // List prices, not a bill. The point is the shape of the spend: one node and
 // one load balancer dominate; everything else is noise at lab volume.
@@ -43,7 +43,7 @@ export default {
         "div",
         { class: "flex flex-wrap items-start justify-between gap-3" },
         header(
-          "Chapter 06 · Cost",
+          "Chapter 05 · Cost",
           "Small by design.",
           "The lab runs at roughly 2.93 $/day when everything is on. That number is dominated by one node and one load balancer; the managed services are noise at this volume."
         ),

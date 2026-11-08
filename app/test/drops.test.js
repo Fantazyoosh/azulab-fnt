@@ -80,7 +80,7 @@ function makeApp() {
     keyVaultUrl: "",
     storageAccountUrl: "",
     maxUploadBytes: 1024,
-    sealIterations: 10000,
+    debugLoadIterations: 10000,
     shareTtlSeconds: 900,
     enableDebugEndpoints: true,
   };
@@ -138,8 +138,8 @@ test("seal then verify succeeds", async () => {
 
   const sealed = await request(app, { method: "POST", path: `/api/drops/${drop.id}/seal` });
   assert.equal(sealed.status, 200);
-  assert.equal(sealed.body.iterations, 10000);
-  assert.equal(sealed.body.algorithm, "PBKDF2-SHA256");
+  assert.equal(sealed.body.iterations, 0);
+  assert.equal(sealed.body.algorithm, "SHA256-SALTED");
   assert.ok(sealed.body.seal);
 
   const verified = await request(app, { method: "POST", path: `/api/drops/${drop.id}/verify` });
