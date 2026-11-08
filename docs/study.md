@@ -11,7 +11,7 @@ komendę, na końcu powiedz odpowiedź na głos bez zaglądania.
 
 1. Przeczytaj [`docs/presentation.md`](presentation.md) — słownik, historia
    projektu i scenariusz 12 minut.
-2. Otwórz UI na AKS i przejdź osiem zakładek, mówiąc na głos po jednym zdaniu.
+2. Otwórz UI na AKS i przejdź siedem zakładek + Debug, mówiąc na głos po jednym zdaniu.
 3. Odpowiedz na 10 trudnych pytań z końca `presentation.md`.
 4. Dopiero potem wchodź w sesje poniżej — są głębsze i zakładają, że znasz już
    podstawy z przewodnika.

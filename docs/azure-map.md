@@ -189,8 +189,9 @@ Ostatnia komenda **nie pokazuje wartości** — tylko metadane. Wartości nie
 wyświetlaj na demo.
 
 > `share-signing-key` podpisuje **linki** (HMAC). **Nie** jest używany do seal.
-> Seal nie ma klucza: to PBKDF2 na digestcie pliku i id dropa. Nie rotuj klucza,
-> żeby zmienić seal — rotacja dotyczy linków, nie plików.
+> Seal nie ma klucza: to SHA-256 z digestu pliku i id dropa. Nie rotuj klucza,
+> żeby zmienić seal — rotacja dotyczy linków, nie plików. PBKDF2 (600k iteracji)
+> jest wyłącznie w `POST /debug/load` jako generator obciążenia.
 
 ### Co jest włączone
 

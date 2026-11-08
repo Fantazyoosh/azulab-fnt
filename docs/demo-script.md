@@ -72,7 +72,7 @@ META=$(curl -s -X POST "http://$AKS/api/drops" \
 ID=$(echo "$META" | jq -r .id)
 echo "id=$ID"
 
-curl -s -X POST "http://$AKS/api/drops/$ID/seal" | jq '{ms,iterations,pod}'
+curl -s -X POST "http://$AKS/api/drops/$ID/seal" | jq '{ms,algorithm,iterations,pod}'
 SHARE=$(curl -s -X POST "http://$AKS/api/drops/$ID/share" \
   -H 'content-type: application/json' -d '{"ttlSeconds":900}')
 URL=$(echo "$SHARE" | jq -r .url)
@@ -87,8 +87,9 @@ Say:
 
 > This is the product: a file, a seal and a link. The upload is raw bytes; the
 > blob name is always `file`, and the original name is metadata. The seal is
-> SHA-256 plus 600,000 PBKDF2 iterations — real CPU, roughly a third of a core
-> second. The link is an HMAC over the drop id, the expiry and the key version.
+> SHA-256 salted with the drop id — cheap on purpose, because upload is the
+> product path. The link is an HMAC over the drop id, the expiry and the key
+> version. The expensive PBKDF2 work lives in the Debug tab, opt-in.
 
 Tamper and expiry (the two failure modes of a signed link):
 
@@ -226,37 +227,7 @@ Measured evidence: `docs/evidence/verification-2026-11-04.txt` — 28 samples at
 
 ---
 
-## 5. Scaling — real CPU, real replicas (2 min)
-
-In the browser: **05 Scaling** → **Observe 20 requests** → **Run 12s of seals**.
-Then watch the HPA:
-
-```bash
-kubectl -n azulab get hpa azulab -w
-kubectl -n azulab top pods
-```
-
-Expected: the UI load shows two pod names and moves CPU above the 60% target; a
-short run usually takes replicas 2 → 3. For the ceiling, burn CPU for 120 seconds:
-
-```bash
-POD=$(kubectl -n azulab get pods -o jsonpath='{.items[0].metadata.name}')
-kubectl -n azulab exec "$POD" -- timeout 120 sh -c 'yes > /dev/null' &
-# In another pane:
-kubectl -n azulab get hpa azulab -w
-```
-
-Say:
-
-> Requests are 100m, limits 300m, target 60% of the request, min 2, max 6. The
-> seal is PBKDF2 on the libuv threadpool, so the event loop keeps answering while
-> the CPU is saturated. That matters: a blocking loop would fail readiness before
-> the HPA could add a pod. The node is a single 2-vCPU D2as_v5, so the HPA adds
-> pods but the node is the ceiling. Measured: 2 → 6 → 2.
-
----
-
-## 6. Cost — small by design (1 min)
+## 5. Cost — small by design (1 min)
 
 In the browser: **06 Cost** → **The bill** and **Levers**.
 
@@ -280,7 +251,7 @@ Say:
 
 ---
 
-## 7. Availability — failure is a feature (2 min)
+## 6. Availability — failure is a feature (2 min)
 
 In the browser: **07 Availability** → **Drain this pod (60 s)**. Watch the
 timeline and the ready endpoints. Then explain readiness vs liveness.
@@ -321,7 +292,7 @@ kubectl -n azulab get pods -o custom-columns='NAME:.metadata.name,RESTARTS:.stat
 
 ---
 
-## 8. Delivery — one image, two runtimes (2 min)
+## 7. Delivery — one image, two runtimes (2 min)
 
 In the browser: **08 Delivery** → artifact card and the AKS/ACA comparison.
 Then prove the same tag on both:
@@ -354,6 +325,37 @@ Say:
 > protects the Container App root with Entra ID, but `/s/*` stays anonymous:
 > the HMAC in the URL is the credential. That is why the same signed link
 > downloads byte-identical content from both runtimes.
+
+---
+
+## 8. Debug — CPU on demand (2 min)
+
+In the browser: **Debug** (last tab, unnumbered) → **Observe 20 requests** →
+**Run 12s of CPU work**. Then watch the HPA:
+
+```bash
+kubectl -n azulab get hpa azulab -w
+kubectl -n azulab top pods
+```
+
+Expected: the UI load shows two pod names and moves CPU above the 60% target; a
+short run usually takes replicas 2 → 3. For the ceiling, burn CPU for 120 seconds:
+
+```bash
+POD=$(kubectl -n azulab get pods -o jsonpath='{.items[0].metadata.name}')
+kubectl -n azulab exec "$POD" -- timeout 120 sh -c 'yes > /dev/null' &
+# In another pane:
+kubectl -n azulab get hpa azulab -w
+```
+
+Say:
+
+> Requests are 100m, limits 300m, target 60% of the request, min 2, max 6. The
+> product seal is cheap SHA-256; the CPU burn is opt-in here. `POST /debug/load`
+> runs PBKDF2 on the libuv threadpool, so the event loop keeps answering while
+> the CPU is saturated — a blocking loop would fail readiness before the HPA
+> could add a pod. The node is a single 2-vCPU D2pls_v6, so the HPA adds pods but
+> the node is the ceiling. Measured: 2 → 6 → 2.
 
 ---
 

@@ -5,9 +5,10 @@
 > failure — live, not illustrated.
 
 Azulab is a small product with a deliberately serious backend. You upload a file,
-the app stores it in a private Blob container, computes a slow cryptographic seal,
+the app stores it in a private Blob container, computes a cheap integrity seal,
 and signs a share link that expires. There is no account, no session and no shared
 key. Every chapter of the UI then explains one Azure mechanism behind that flow.
+The CPU-heavy PBKDF2 demo is opt-in on the **Debug** tab, never on the product path.
 
 ---
 
@@ -16,9 +17,10 @@ key. Every chapter of the UI then explains one Azure mechanism behind that flow.
 1. **Upload** — raw bytes go to Blob Storage under a random id. The original
    filename stays metadata; the blob name is always `file`, so user input never
    reaches a path.
-2. **Seal** — SHA-256 digest plus a PBKDF2-SHA256 work factor (600,000
-   iterations). The seal is deliberately expensive to recompute; it runs on the
-   libuv threadpool, so the Node event loop keeps answering.
+2. **Seal** — SHA-256 digest, salted with the drop id (`SHA256-SALTED`). It is
+   cheap by design, because upload is the product path. PBKDF2 still exists, but
+   only in `POST /debug/load`, where 600,000 iterations of real CPU work move the
+   HPA; the seal record stays backward compatible with old PBKDF2 seals.
 3. **Share** — HMAC-SHA256 over `id`, expiry and key version. The key lives in
    Key Vault; the URL carries the version, so rotation does not break old links.
    Disabling a version revokes its links within a bounded 60 seconds.
@@ -29,27 +31,28 @@ mode and the UI labels it as such.
 
 ---
 
-## 🧭 The eight chapters (the presentation agenda)
+## 🧭 The seven chapters (the presentation agenda)
 
 The UI is the presentation. Each tab makes one claim and proves it with live data
-from the process answering the request.
+from the process answering the request. `Debug` is deliberately last and
+unnumbered: it holds the load generator and the chaos knobs, not the argument.
 
 | # | Chapter | The claim | What proves it | Azure mechanism |
 | --- | --- | --- | --- | --- |
-| 01 | **Drop** | Upload, seal, share — the product works. | A real file, a seal time, a signed URL, a download. | Blob Storage + HMAC key in Key Vault |
+| 01 | **Drop** | Upload, seal, share — the product works. | A real file, a cheap seal, a signed URL, a download. | Blob Storage + HMAC key in Key Vault |
 | 02 | **Blob** | Storage without a key. | Live object/version counts, bulk writes, soft-delete round trip. | Private container, shared key auth disabled, managed identity |
 | 03 | **RBAC** | Identity, not keys. | Token claims + three probes: read secret 200, list blobs 200, list account keys 403. | Workload Identity, narrow roles on narrow scopes |
 | 04 | **Key Vault** | The key never leaves the vault. | Version and fingerprint only; rotate and revoke commands. | Versioned secret, 5-minute current TTL, 60-second version re-check |
-| 05 | **Scaling** | Real CPU, real replicas. | Per-pod seal distribution, HPA 2 → 6, CPU target 60%. | HPA on AKS, requests 100m / limits 300m |
-| 06 | **Cost** | Small by design. | The bill, the levers, the lifecycle bound. | One node, one LB, ACA scale-to-zero, Cool 30 d / delete 90 d |
-| 07 | **Availability** | Failure is a feature. | Crash and drain buttons; readiness drops a pod from endpoints. | Readiness vs liveness, PDB, maxUnavailable 0 |
-| 08 | **Delivery** | One image. Two runtimes. | Commit SHA, image tag, pod; AKS and ACA side by side. | GitHub Actions, OIDC, GHCR, immutable SHA tags |
+| 05 | **Cost** | Small by design. | The bill, the levers, the lifecycle bound. | One node, one LB, ACA scale-to-zero, Cool 30 d / delete 90 d |
+| 06 | **Availability** | Failure is a feature. | Crash and drain buttons; readiness drops a pod from endpoints. | Readiness vs liveness, PDB, maxUnavailable 0 |
+| 07 | **Delivery** | One image. Two runtimes. | Commit SHA, image tag, pod; AKS and ACA side by side. | GitHub Actions, OIDC, GHCR, immutable SHA tags |
+| — | **Debug** | Break it on purpose. | CPU load on demand, pod distribution, metrics, chaos. | HPA 2 → 6 on AKS, `ENABLE_DEBUG_ENDPOINTS` |
 
 The screenshots below are from the deployed AKS instance:
 
 ![Drop chapter on AKS](docs/img/drop.png)
 
-![Scaling chapter on AKS](docs/img/scaling.png)
+![HPA under load, Debug tab](docs/img/scaling.png)
 
 ![Availability chapter on AKS](docs/img/availability.png)
 
@@ -143,7 +146,7 @@ The image tag is the commit SHA, never `latest`.
 
 **New to the project?** Read **[`docs/presentation.md`](docs/presentation.md)**
 first. It starts with a plain-language glossary (AKS, pod, HPA, HMAC, seal,
-PBKDF2, Easy Auth) and then walks through the eight chapters with the exact words
+PBKDF2, Easy Auth) and then walks through the seven chapters with the exact words
 to say. It is written in Polish.
 
 **Start here:**
@@ -152,7 +155,7 @@ to say. It is written in Polish.
   — every term explained, the 12-minute script, difficult questions and the
   15-minute pre-flight (Polish).
 - **[Demo script (`docs/demo-script.md`)](docs/demo-script.md)** — commands and
-  "what to say" for each of the eight chapters.
+  "what to say" for each of the seven chapters.
 - **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
   — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation,
   crash continuity.

@@ -16,7 +16,7 @@ GitHub main ──CI──► GHCR :<commit-sha>
                          │
              ┌───────────┴────────────┐
              ▼                        ▼
-     Container Apps              AKS (swedencentral)
+     Container Apps              AKS (northcentralus)
      ca-azulab-dev               ns: azulab, HPA 2–6
      managed identity            Workload Identity (federated token)
              │                        │
@@ -27,28 +27,33 @@ GitHub main ──CI──► GHCR :<commit-sha>
 
 ---
 
-## Why `swedencentral`
+## Why `northcentralus`
 
 The subscription is an Azure **Free Trial** (`quotaId: FreeTrial_2014-09-01`,
-`spendingLimit: On`). Compute SKU availability is restricted per region and
-offer. Measured with `Microsoft.Compute/skus` restrictions:
+`spendingLimit: On`). General-purpose VM sizes are restricted per region and
+per offer, so "the cheapest region" is not the same as the cheapest *usable*
+region.
 
-| Region | `Standard_B2s` | `Standard_D2as_v5` |
-| --- | --- | --- |
-| polandcentral | not available | not available |
-| westeurope | not available | not available |
-| northeurope | not available | not available |
-| germanywestcentral | not available | not available |
-| eastus / eastus2 | not available | not available |
-| uksouth / francecentral | not available | not available |
-| **swedencentral** | `B2s_v2` available | **available** |
+Every AKS-capable region was cross-checked against `Microsoft.Compute/skus`
+and the Retail Prices API. The cheapest node this subscription may actually
+create is **`Standard_D2pls_v6` in `northcentralus`**: 2 vCPU / 4 GiB, Arm64,
+**$0.062/h**. AKS accepts Arm64 system node pools (validated on 2026-11-07),
+and every AKS system image is multi-arch.
+
+| Candidate | Region | $/hour | Why not |
+| --- | --- | --- | --- |
+| `Standard_D2as_v5` | swedencentral | 0.092 | previous node; 48% more expensive |
+| `Standard_D2als_v6` | indiasouthcentral | 0.0804 | x86 fallback, but still more expensive |
+| `Standard_D2pls_v6` | **northcentralus** | **0.062** | **chosen** |
+| `Standard_D2pls_v6` | eastus3 | 0.062 | AKS is not available in `eastus3` |
+| `Standard_D2pls_v6` | centralindia | 0.0408 | `NotAvailableForSubscription` on the Free Trial |
 
 The resource group stays in `polandcentral`; a resource group is a logical
 container, not a location restriction. The AKS node resource group
-(`MC_rg-azulab-dev-polandcentral_aks-azulab-dev_swedencentral`) is created in
-`swedencentral` by AKS itself.
+(`MC_rg-azulab-dev-polandcentral_aks-azulab-dev_northcentralus`) is created in
+`northcentralus` by AKS itself.
 
-Quota in `swedencentral`: 4 vCPU per family, so a single 2-vCPU node fits.
+Quota in `northcentralus`: 4 vCPU per family, so a single 2-vCPU node fits.
 
 ---
 
@@ -58,6 +63,8 @@ Quota in `swedencentral`: 4 vCPU per family, so a single 2-vCPU node fits.
 | --- | --- | --- |
 | Free tier control plane | no SLA | Standard tier with uptime SLA |
 | 1 node | node loss = outage | 3 nodes across zones |
+| Arm64 node | cheapest allowed SKU; the image must stay multi-arch | x86 or mixed pools |
+| 30 GiB OS disk | tight for many images; fine for this one | size for the image cache and logs |
 | `kubenet` | no VNet-native pod IPs | Azure CNI Overlay |
 | Public API server | larger attack surface | private cluster + private DNS |
 | Local accounts enabled | `az aks get-credentials` returns a cluster-admin kubeconfig | `local_accounts_enabled = false` + Azure RBAC for Kubernetes |
@@ -126,11 +133,14 @@ The HPA scales on CPU utilization relative to the **request**, not the limit:
 | request / limit | 100m / 300m | low request makes the signal visible; hard limit protects the kubelet |
 | scale-down stabilization | 60 s | long enough to avoid flapping, short enough for a demo |
 
-The seal is PBKDF2 on the libuv threadpool, roughly a third of a core-second at
-600,000 iterations. That is real CPU the metrics-server can see, and the event
-loop keeps answering health checks while it runs. The HPA reacts on a ~15 s
-metrics window; a 12-second burst may scale 2 → 3, while a sustained burn reaches
-the ceiling of 6 and returns to 2 after the stabilization window.
+The load generator is the only CPU-heavy path, and it is opt-in on the Debug tab:
+`POST /debug/load` runs PBKDF2 on the libuv threadpool (default 600,000
+iterations per round, 8,000,000 total per request) and writes nothing to Blob.
+That is real CPU the metrics-server can see, and the event loop keeps answering
+health checks while it runs. The product seal itself is a cheap SHA-256. The HPA
+reacts on a ~15 s metrics window; a 12-second burst may scale 2 → 3, while a
+sustained burn reaches the ceiling of 6 and returns to 2 after the stabilization
+window.
 
 There is deliberately **no cluster autoscaler**: the node is fixed, so the HPA
 adds pods but cannot add capacity. That limit is the point of the Cost chapter.

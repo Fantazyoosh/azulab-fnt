@@ -44,11 +44,11 @@ it without looking.
 - Why both: Kubernetes/Container Apps replace pods/replicas only when *ready* is
   down; *health* down kills and restarts. Mixing them causes flapping.
 
-### `/api/blobs` CRUD
-- Name validation regex (path traversal, slashes, spaces) before any SDK call.
-- Size limit enforced server-side (413).
-- Storage check (503) after input validation — bad input is always 400.
-- Download streams from blob; delete is idempotent.
+### `/api/blob` admin routes
+- `stats`, `bulk` and `soft-delete-demo` are the only storage-admin endpoints;
+  they answer 503 when no storage account is configured.
+- Bulk count is clamped server-side (`BULK_MAX`) instead of trusted from the UI.
+- Soft delete is a round trip: upload, delete, list deleted, undelete.
 
 ### central error handler
 - Never leaks stack trace; always returns `{ error, message, requestId }`.
@@ -73,7 +73,7 @@ it without looking.
 - [ ] Re-implement graceful shutdown from memory.
 - [ ] Run `npm test`, then delete one assertion and confirm the suite still
       passes (mutation test) — prove tests actually assert something.
-- [ ] Add `GET /api/blobs/:name` test with a *wrong* name (no storage) → 400.
+- [ ] Add a `/api/blob/stats` test with no storage configured → 503.
 - [ ] Write one new test you are proud of and paste it in docs/questions.md.
 - [ ] Explain, out loud and without notes, why storage account has no country rule
       (see docs/security.md) and where geo-blocking belongs.

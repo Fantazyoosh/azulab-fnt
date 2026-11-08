@@ -102,14 +102,15 @@ must drain traffic, not restart every replica.
 
 ## 2. The legacy message secret
 
-The original demo had a single `app-message` secret. The endpoint still exists,
-but it is not part of the Drop product flow.
+The original demo had a single `app-message` secret and a `/api/message` endpoint.
+Both are gone: the application no longer reads that secret, and the runtime has
+no code path that depends on it. The value may still exist in Key Vault for
+historical reference, but nothing reads it and `SECRET_NAME` is no longer set in
+the Deployment or Container App.
 
-- It is read once at startup with five attempts and capped exponential backoff.
-- It is cached for the life of the process.
-- Rotating it requires a rollout restart, because the old code does not watch
-  Key Vault. This is exactly the limitation the signing key was designed to
-  avoid: the signing key is versioned, re-checked and revocable online.
+This matters for the interview story: the only secret the product depends on is
+the versioned, re-checked and revocable signing key. Removing the legacy path is
+what makes that claim true.
 
 ---
 

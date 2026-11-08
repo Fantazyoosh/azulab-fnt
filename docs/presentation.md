@@ -92,9 +92,9 @@ ograniczenia: jeden node, brak cluster autoscalera i brak ingressu z TLS.
 | Pojęcie | Co to jest | W tym projekcie |
 | --- | --- | --- |
 | **SHA-256** | Szybki, jednokierunkowy hash; 256 bitów = 64 znaki hex. | `digest = SHA-256(file)`; wykrywa zmianę pliku. |
-| **PBKDF2** | Celowo wolna funkcja wyprowadzania klucza. | 600 000 iteracji HMAC-SHA256 na digestcie i soli; daje `seal`. |
+| **PBKDF2** | Celowo wolna funkcja wyprowadzania klucza. | Tylko w `POST /debug/load` jako generator obciążenia dla HPA; **nie** liczy seal. |
 | **digest** | Wynik SHA-256. | Szybki odcisk pliku; pole `digest` w `seal.json`. |
-| **seal** | Wynik PBKDF2. | Wolny odcisk pliku; integralność + koszt CPU. **Nie** szyfruje, **nie** jest podpisem i **nie ma klucza**. |
+| **seal** | SHA-256 z digestu i soli (id dropa). | Tani odcisk pliku; integralność bez kosztu CPU. **Nie** szyfruje, **nie** jest podpisem i **nie ma klucza**. |
 | **fingerprint** | Krótki SHA-256 **wartości klucza**. | Pokazany w UI, żeby widzieć zmianę klucza bez ujawniania sekretu. Nie ma go w linku. |
 | **HMAC** | Hash z kluczem symetrycznym. | `sig = HMAC-SHA256(key, id.exp.v)`; podpis linku. |
 | **key version** | Niemutowalna wersja sekretu w Key Vault. | `v` w URL; stare linki niosą swoją wersję. |
@@ -206,51 +206,40 @@ Tutaj tylko nasz serwer weryfikuje, więc HMAC wystarcza.
 > ponownie i porównuje z `sig`; zmiana id, expiry albo wersji klucza psuje
 > podpis. To nie szyfrowanie.”
 
-### PBKDF2 — Password-Based Key Derivation Function 2
+### PBKDF2 — work factor tylko w Debug
 
 **Co to jest:** celowo wolna funkcja wyprowadzania klucza. Powtarza
 HMAC-SHA256 wiele razy, żeby wynik był kosztowny obliczeniowo. Standardowo
-spowalnia ataki na hasła; tutaj używamy jej jako **work factora**.
+spowalnia ataki na hasła; tutaj jest **generatorem obciążenia**.
 
-**W projekcie:**
+**W projekcie:** wyłącznie `POST /debug/load` (zakładka Debug).
 
 ```text
-digest = SHA-256(file)
-seal   = PBKDF2-HMAC-SHA256(password=digest, salt=id, iterations=600000, keylen=32)
+POST /debug/load { "iterations": 600000, "rounds": 2 }
+→ PBKDF2-HMAC-SHA256(random seed, salt, iterations, 32 B)
 ```
 
-- plik czytamy **raz** i liczymy SHA-256,
-- PBKDF2 wykonuje **600 000 iteracji HMAC-SHA256** na małym digestcie i soli,
-- wynik to 32 bajty = `seal`,
-- czas: ~300–400 ms na AKS,
-- `crypto.pbkdf2` jest async, idzie na libuv threadpool; event loop dalej
-  odpowiada na probe’y.
+- domyślnie **600 000 iteracji**, maksimum 2 000 000 na rundę,
+- maksymalnie 32 rundy i **8 000 000 iteracji łącznie** na request,
+- endpoint **nic nie zapisuje** do Blob — w przeciwieństwie do starej pętli
+  `POST /seal`, która przy okazji robiła dwa zapisy na wywołanie,
+- `crypto.pbkdf2` jest async i idzie na libuv threadpool; event loop dalej
+  odpowiada na probe’y, więc pod nie wypada z readiness zanim HPA pomoże,
+- równoległe rundy trafiają na osobne wątki — taki kształt ma burst requestów.
 
-**Gdzie jest klucz do sealowania?** **Nie ma go.**
-
-- „password” to digest pliku, nie sekret,
-- salt to id dropa, nie sekret,
-- każdy z plikiem i id może policzyć seal,
-- seal nie jest MAC-iem, podpisem ani szyfrowaniem.
-
-Klucz z Key Vault (`share-signing-key`) jest tylko do HMAC linku. Nie rotuj
-go, żeby zmienić seal.
-
-**Dlaczego 600k?** SHA-256 wystarcza do integralności. PBKDF2 dokładamy
-świadomie, żeby seal był kosztowny CPU i HPA miał realny sygnał. To wymóg
-demo, nie bezpieczeństwa pliku.
+**Czego PBKDF2 nie robi:** nie liczy `seal`. Seal to SHA-256 z solą, tani
+i deterministyczny. PBKDF2 nie ma też klucza — „password” to losowy seed.
 
 **Zdanie na rozmowę:**
-> „PBKDF2 to 600 000 iteracji HMAC-SHA256 na digestcie pliku i id dropa.
-> Seal nie ma klucza — każdy może go przeliczyć. Klucz z Key Vault jest tylko
-> do podpisu linku.”
+> „PBKDF2 zostawiłem tylko jako generator obciążenia w Debug. Produkt liczy
+> tani seal SHA-256 z solą, więc upload nie płaci CPU za demo HPA.”
 
 ### Cztery zdania do zapamiętania
 
 1. **PDB** chroni przed drainem, nie przed awarią node’a.
 2. **HPA** skaluje pody, nie node’y; na jednym node jest sufit.
 3. **HMAC** podpisuje link kluczem z Key Vault; to nie szyfrowanie.
-4. **PBKDF2** to wolny odcisk pliku; seal nie ma klucza.
+4. **PBKDF2** jest tylko w Debug jako generator obciążenia; seal to tani SHA-256 z solą i nie ma klucza.
 
 ---
 
@@ -266,30 +255,30 @@ demo, nie bezpieczeństwa pliku.
 ### Seal — algorytm, czas i „klucz”
 
 1. `digest = SHA-256(file bytes)`.
-2. `seal = PBKDF2-HMAC-SHA256(password=digest, salt=id, iterations=600000, keylen=32)`.
-3. Wynik trafia do `seal.json`.
+2. `seal = SHA-256(digest + ":" + id)` — sól to id dropa.
+3. Wynik trafia do `seal.json` jako `algorithm: "SHA256-SALTED"`.
 
-**Algorytm:** SHA-256, a potem PBKDF2-HMAC-SHA256 (Node `crypto.pbkdf2`,
-`sha256`, output 32 bajty).
+**Algorytm:** dwa szybkie SHA-256: pierwszy po bajtach pliku, drugi po
+`digest:id`. Oba kosztują mikrosekundy — seal jest na ścieżce produktu, więc
+nie może grzać CPU.
 
-**Czas:** na AKS pojedynczy seal to zwykle **300–400 ms** przy 600 000 iteracjach.
-Pod ma domyślnie 4 wątki libuv, więc kilka sealów może iść równolegle. W teście
-12 s loadu dało 34 seale na 2 podach, najwolniejszy ~403 ms.
+**Czas:** poniżej 1 ms dla pliku do 5 MB (dominuje sam SHA-256 bajtów).
+
+**Zgodność wstecz:** rekord zapisany przez starszy build ma
+`algorithm: "PBKDF2-SHA256"` i `iterations: 600000`; `verifySeal` przelicza go
+tą samą drogą, więc stare dropy dalej się weryfikują.
 
 **Gdzie jest klucz do sealowania?** **Nie ma go.** To jest najważniejsza rzecz:
 
-- PBKDF2 nazywa wejście „password”, ale tutaj „password” to **digest pliku**, nie
-  sekret.
-- Salt to **id dropa**, też nie sekret.
-- Każdy, kto ma plik i id, może policzyć ten sam seal.
-- Seal **nie jest MAC-iem, podpisem ani szyfrowaniem**. To wolny odcisk pliku.
+- seal to odcisk, nie MAC i nie podpis,
+- sól to **id dropa**, nie sekret,
+- każdy, kto ma plik i id, policzy ten sam seal.
 
-**Kto liczy seal?** Proces Node w podzie, asynchronicznie na libuv threadpool;
+**Kto liczy seal?** Proces Node w podzie, w requestcie (SHA-256 jest szybki);
 wynik zapisuje do `drops/<id>/seal.json`. Nie robi tego człowiek ani Key Vault.
 
-**Kto tworzy klucz?** Do seal **nikt**, bo go nie ma. `SEAL_ITERATIONS` to
-konfiguracja (domyślnie 600 000, zakres 10 000–2 000 000). Liczba iteracji jest
-zapisywana w `seal.json`; verify używa **zapisanej** wartości, nie bieżącej.
+**Kto tworzy klucz?** Do seal **nikt**, bo go nie ma. `DEBUG_LOAD_ITERATIONS`
+(domyślnie 600 000) dotyczy wyłącznie generatora obciążenia w Debug.
 
 ### Klucz, który podpisuje link — nie seal
 
@@ -322,14 +311,15 @@ kluczem, nie jest sealem i nie jest `sig`.
 | Rzecz | Z czego powstaje | Czy jest klucz? | Gdzie |
 | --- | --- | --- | --- |
 | **digest** | SHA-256 z bajtów pliku | nie | `seal.json` |
-| **seal** | PBKDF2(digest, id, 600k) | **nie** | `seal.json` |
+| **seal** | SHA-256(digest + id) | **nie** | `seal.json` |
 | **sig** | HMAC(klucz z Key Vault, `id.exp.v`) | tak | URL |
 | **fingerprint** | SHA-256 wartości klucza, skrócony | nie | UI / config |
 
 Zdanie na rozmowę:
 
-> „Seal nie ma klucza. To PBKDF2 na digestcie pliku i id dropa — każdy może go
-> przeliczyć. Klucz z Key Vault jest tylko do HMAC podpisu linku.”
+> „Seal nie ma klucza. To SHA-256 z digestu pliku i id dropa — każdy może go
+> przeliczyć. Klucz z Key Vault jest tylko do HMAC podpisu linku. PBKDF2 jest
+> osobno, wyłącznie jako generator obciążenia w Debug.”
 
 ### Gdzie jest `seal.json`
 
@@ -371,24 +361,24 @@ klucza, ale jest credentialem — traktuj go jak hasło.
 ### Download i Verify
 
 - Download: strumień bajtów z Blob. **Nie weryfikuje seal automatycznie.**
-- Verify: przelicza SHA-256 i PBKDF2, porównuje z `seal.json`.
+- Verify: przelicza SHA-256 (i PBKDF2 tylko dla starych rekordów), porównuje z `seal.json`.
 - Zmiana pliku → verify mówi „tampered”; download nadal zwróci zmienione bajty.
 - Wygaśnięcie → 410. Zły podpis → 403. Wyłączona wersja klucza → 403.
 
 ---
 
-## 4. Osiem zakładek — co klikasz i co mówisz
+## 4. Siedem zakładek + Debug — co klikasz i co mówisz
 
 | # | Zakładka | Co klikasz | Co mówisz |
 | --- | --- | --- | --- |
-| 01 | **Drop** | upload, seal, Share, Open, Verify | „Upload → Blob, seal → integralność + CPU, link → HMAC z wersją klucza.” |
+| 01 | **Drop** | upload, seal, Share, Open, Verify | „Upload → Blob, seal → tani odcisk integralności, link → HMAC z wersją klucza.” |
 | 02 | **Blob** | Refresh stats, Write 20, soft-delete | „Prywatny kontener, shared key disabled, managed identity, lifecycle 30/90.” |
 | 03 | **RBAC** | Run all three probes | „200, 200, 403 — runtime może dane, ale nie klucze konta.” |
 | 04 | **Key Vault** | Refresh key state | „Wersja i fingerprint; rotacja nie łamie, disable rewokuje w ≤60 s.” |
-| 05 | **Scaling** | Observe 20, Run 12s | „HPA 2–6, 60%; node 2 vCPU jest sufitem.” |
-| 06 | **Cost** | The bill | „2,93 $/dzień; node 2,21, LB 0,60, IP 0,12; pody nie kosztują osobno.” |
-| 07 | **Availability** | Drain / crash | „Readiness drenuje, liveness restartuje; jeden node to shared fate.” |
-| 08 | **Delivery** | SHA, image | „Ten sam tag na AKS i ACA; ACA 401, AKS 200.” |
+| 05 | **Cost** | The bill | „2,93 $/dzień; node 2,21, LB 0,60, IP 0,12; pody nie kosztują osobno.” |
+| 06 | **Availability** | Drain / crash | „Readiness drenuje, liveness restartuje; jeden node to shared fate.” |
+| 07 | **Delivery** | SHA, image | „Ten sam tag na AKS i ACA; ACA 401, AKS 200.” |
+| — | **Debug** | Observe 20, Run 12s | „HPA 2–6, 60%; PBKDF2 tylko tutaj — produkt nie płaci CPU.” |
 
 ---
 
@@ -468,11 +458,12 @@ Dwie stałe warto rozróżnić: **5 minut** to TTL bieżącej wersji — po tylu
 linki przechodzą na nowy klucz. **60 sekund** to re-check wersji w cache — po
 tylu wyłączenie wersji rewokuje stare linki.
 
-I najważniejsza korekta: **seal nie ma klucza**. Seal to wolny odcisk pliku —
-SHA-256, a potem PBKDF2 z 600 000 iteracji. „Password” to digest pliku, salt to
-id dropa; oba są publiczne. Klucz z Key Vault jest tylko do **HMAC podpisu
-linku**, nie do sealowania. Seal nie jest szyfrowaniem, MAC-iem ani podpisem —
-to integralność i koszt CPU.
+I najważniejsza korekta: **seal nie ma klucza**. Seal to tani odcisk pliku —
+SHA-256 z bajtów, a potem SHA-256 z digestu i id dropa. Oba wejścia są
+publiczne. Klucz z Key Vault jest tylko do **HMAC podpisu linku**, nie do
+sealowania. Seal nie jest szyfrowaniem, MAC-iem ani podpisem — to integralność.
+Drogi PBKDF2 (600 000 iteracji) jest osobno, wyłącznie w Debug jako generator
+obciążenia dla HPA.
 
 ### Blob — magazyn bez master key
 
@@ -532,8 +523,8 @@ Bezpieczeństwo nie polega na tym, że „nic nie może się stać”, tylko na 
 > aplikacja zapisuje go w Blob Storage, liczy seal i wydaje podpisany link, który
 > wygasa.
 >
-> Seal to celowo wolny odcisk pliku: SHA-256 z bajtów, a potem PBKDF2 z 600 000
-> iteracji. To nie szyfrowanie — to integralność i koszt CPU. Link jest podpisany
+> Seal to tani odcisk pliku: SHA-256 z bajtów, a potem SHA-256 z digestu i id
+> dropa. To nie szyfrowanie — tylko integralność. Link jest podpisany
 > HMAC-iem: serwer bierze klucz z Key Vault i liczy HMAC po id, expiry i wersji
 > klucza. Podpis trafia do URL jako `sig`.
 >
@@ -551,9 +542,9 @@ Bezpieczeństwo nie polega na tym, że „nic nie może się stać”, tylko na 
 Open → Verify.
 
 **Mów:**
-> „Upload zapisuje bajty w Blob; nazwa pliku jest tylko metadata. Seal to SHA-256
-> plus PBKDF2 600k — integralność i celowy koszt CPU, nie szyfrowanie. Seal trwa
-> około 300–400 ms. Link ma id, expiry, wersję klucza i HMAC. Otwieram link —
+> „Upload zapisuje bajty w Blob; nazwa pliku jest tylko metadata. Seal to
+> SHA-256 z solą — tania integralność, poniżej milisekundy, nie szyfrowanie.
+> Link ma id, expiry, wersję klucza i HMAC. Otwieram link —
 > plik się pobiera. Verify przelicza seal i porównuje z `seal.json`; download sam
 > tego nie robi.”
 
@@ -591,20 +582,7 @@ Open → Verify.
 > niosą swoją wersję. Wyłączenie starej wersji rewokuje jej linki w ciągu
 > maksymalnie 60 sekund.”
 
-### 05 Scaling (2 min)
-
-**Klik:** Observe 20 → Run 12s of seals.
-
-**Mów:**
-> „HPA patrzy na CPU: min 2, max 6, target 60% requestu; request 100m, limit 300m.
-> Po 12 s loadu CPU przekroczył 60%; HPA reaguje na ~15 s okno, więc często widać
-> trzeci pod, a przy dłuższym obciążeniu dochodzi do 6. Wszystkie pody są na
-> jednym node z 2 vCPU, więc dzielą te same rdzenie. HPA dodaje równoległość, nie
-> moc: przy 6 podach rośnie throttling i latency. To demo kontraktu HPA; node jest
-> sufitem. Cluster autoscaler dodałby node, ale tylko gdy pody są Pending — nie
-> dlatego, że CPU jest wysokie.”
-
-### 06 Cost (1 min)
+### 05 Cost (1 min)
 
 **Klik:** The bill.
 
@@ -613,7 +591,7 @@ Open → Verify.
 > pozycją — płacę za node. ACA przy bezczynności jest 0, ale ma cold start.
 > Budżet 50 $ to alert, nie limit. Lifecycle ogranicza storage.”
 
-### 07 Availability (1 min)
+### 06 Availability (1 min)
 
 **Klik:** Drain this pod (albo crash).
 
@@ -624,7 +602,7 @@ Open → Verify.
 > `minAvailable: 1` chroni drain, nie awarię node’a. Jeden node to shared fate:
 > awaria node’a zabiera oba pody.”
 
-### 08 Delivery (1 min)
+### 07 Delivery (1 min)
 
 **Klik:** SHA, image, pod.
 
@@ -633,6 +611,19 @@ Open → Verify.
 > robi smoke test `/health` i `/ready`. ACA root zwraca 401, bo Easy Auth wymaga
 > sesji; AKS root jest publiczny i zwraca 200. `/s/*` jest wyłączone z auth, bo
 > link sam jest credentialem. Jedyny długotrwały sekret to client secret Easy Auth.”
+
+### Debug — opcjonalnie, 2 min
+
+**Klik:** Observe 20 → Run 12s of CPU work.
+
+**Mów:**
+> „To nie jest rozdział produktu. Produkt liczy tani seal SHA-256 z solą, więc
+> upload nie płaci CPU. Tutaj jest jedyne miejsce, gdzie palę procesor: PBKDF2
+> w `/debug/load`, 600 000 iteracji na rundę, bez żadnego zapisu do Blob.
+> HPA patrzy na CPU: min 2, max 6, target 60%; po 12 s loadu pojawia się trzeci
+> pod, a przy dłuższym obciążeniu dochodzi do 6. Wszystkie pody są na jednym node
+> z 2 vCPU, więc HPA dodaje równoległość, nie moc — node jest sufitem. Endpointy
+> są za `ENABLE_DEBUG_ENDPOINTS`; na ACA bez tej flagi zwracają 404 i UI to mówi.”
 
 ---
 
@@ -644,11 +635,12 @@ Open → Verify.
 > dokłada format i claimy, których tu nie potrzebuję. Serwer jest jedynym
 > weryfikatorem, więc symetryczny HMAC wystarcza.”
 
-**2. Dlaczego PBKDF2, a nie bcrypt/Argon2?**
-> „PBKDF2 jest w Node bez natywnego modułu, a tutaj nie hashuję haseł — potrzebuję
-> kontrolowanego kosztu CPU i deterministycznego wyniku. bcrypt/Argon2 są lepsze
-> do haseł, ale wymagają dodatkowej zależności. SHA-256 wystarcza do integralności;
-> PBKDF2 dokładam świadomie jako work factor dla HPA.”
+**2. Skoro seal jest tani, po co w projekcie PBKDF2?**
+> „Produkt go nie potrzebuje: SHA-256 z solą wystarcza do integralności. PBKDF2
+> zostawiłem wyłącznie jako generator obciążenia w Debug, bo HPA potrzebuje
+> realnego, kontrolowanego kosztu CPU. bcrypt/Argon2 są do haseł, a tutaj nie
+> hashuję haseł. Gdybym chciał chronić plik hasłem użytkownika, Argon2 byłby
+> właściwym wyborem.”
 
 **3. Co się dzieje, gdy Key Vault padnie?**
 > „Jeśli klucz jest w cache, linki dalej działają; cache jest oznaczony jako
@@ -710,7 +702,7 @@ Open → Verify.
 | „cluster selector” | **cluster autoscaler**. |
 | „brak endpointów = 403” | Brak endpointów = **503/timeout**. |
 | „ACA 401 to błąd” | To Easy Auth; root wymaga sesji. |
-| „PBKDF2 do haseł” | Tutaj PBKDF2 to **work factor** na digestcie pliku. |
+| „PBKDF2 liczy seal” | Seal to tani SHA-256 z solą; PBKDF2 jest tylko generatorem obciążenia w Debug. |
 | „seal dowodzi autorstwa” | Seal dowodzi integralności względem `seal.json`, nie autorstwa. |
 
 ---

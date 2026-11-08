@@ -245,7 +245,8 @@ AKS public.
   the Container App secret store and rotated yearly. This is the only exception to
   the secret-less rule, and it is a platform constraint (Easy Auth is a
   confidential client).
-- The CD smoke test asserts `401` on `/` instead of `200` on `/api/message`;
-  application-level checks moved to `/health` and `/ready`.
+- The CD smoke test asserts `401` on `/` for Container Apps; the legacy
+  `/api/message` check disappeared with the endpoint itself. Application-level
+  checks are `/health` and `/ready`.
 - Protecting AKS the same way would need an ingress with an OIDC proxy
   (oauth2-proxy); that is a different lesson and is out of scope.
