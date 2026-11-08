@@ -44,7 +44,7 @@ ograniczenia: jeden node, brak cluster autoscalera i brak ingressu z TLS.
 | --- | --- | --- |
 | **AKS** | Managed Kubernetes w Azure. | Klaster, na którym działa aplikacja. To **nie jest strona** — aplikację otwierasz w przeglądarce, a klaster oglądasz przez `kubectl`. |
 | **kubectl** | Narzędzie w terminalu do rozmowy z Kubernetes API. | `kubectl get pods`, `kubectl logs`, `kubectl rollout status`. |
-| **node** | Maszyna (VM), na której Kubernetes uruchamia pody. | Jeden node `Standard_D2as_v5`: 2 vCPU, 8 GiB. To on jest sufitem. |
+| **node** | Maszyna (VM), na której Kubernetes uruchamia pody. | Jeden node `Standard_D2pls_v6`: 2 vCPU, 4 GiB, Arm64. To on jest sufitem. |
 | **pod** | Najmniejsza jednostka uruchomieniowa: kontener (lub kilka) z wspólną siecią. | Dwa pody aplikacji. HPA zmienia liczbę podów, nie node’ów. |
 | **Deployment** | Deklaracja „chcę N podów z tym obrazem”. | `azulab`; tworzy ReplicaSet i pody; rollout wymienia wersje. |
 | **ReplicaSet** | Pilnuje, żeby liczba podów zgadzała się z żądaniem. | Tworzony przez Deployment. |

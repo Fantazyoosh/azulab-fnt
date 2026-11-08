@@ -22,15 +22,20 @@ runtime; AKS is the orchestrated one.
 
 ---
 
-## ADR-002 — AKS in `swedencentral`, resource group in `polandcentral`
+## ADR-002 — AKS in `northcentralus` (Arm64), resource group in `polandcentral`
 
 **Context.** The subscription is Azure Free Trial (`quotaId FreeTrial_2014-09-01`).
 `Microsoft.Compute/skus` restrictions reject every general-purpose VM size in
 `polandcentral`, `westeurope`, `northeurope`, `germanywestcentral`, `eastus`,
 `eastus2`, `uksouth` and `francecentral`.
 
-**Decision.** Create the cluster in `swedencentral`, where `Standard_D2as_v5` is
-allowed. Keep the resource group in Poland.
+**Decision.** Create the cluster in `northcentralus`, where
+`Standard_D2pls_v6` (2 vCPU / 4 GiB, Arm64) is allowed at $0.062/h — the
+cheapest node this subscription may actually create. The image is published for
+`linux/amd64` and `linux/arm64`. Keep the resource group in Poland.
+
+*Superseded:* the first deployment used `Standard_D2as_v5` in `swedencentral`
+($0.092/h). The Arm64 SKU is 48% cheaper for the same demo.
 
 **Consequences.**
 - Cross-region latency between the cluster and Key Vault/Storage (single-digit
@@ -74,12 +79,13 @@ the modern default but adds concepts that do not change the demo.
 
 **Context.** The lab budget is credits, not a company card.
 
-**Decision.** `sku_tier = "Free"`, `node_count = 1`, `Standard_D2as_v5` (2 vCPU / 8 GiB).
+**Decision.** `sku_tier = "Free"`, `node_count = 1`,
+`Standard_D2pls_v6` (2 vCPU / 4 GiB, Arm64), 30 GiB OS disk.
 
 **Consequences.**
 - No control-plane SLA; node loss is an outage.
 - Pod-level HA is still demonstrated with 2 replicas and a PodDisruptionBudget.
-- ~2.93 $/day total; `az aks stop` when idle.
+- ~2.21 $/day total; the cluster is stopped overnight by `aks-schedule.yml`.
 
 ---
 

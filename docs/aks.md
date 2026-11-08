@@ -149,15 +149,15 @@ adds pods but cannot add capacity. That limit is the point of the Cost chapter.
 
 ## Cost
 
-Measured with the Azure Retail Prices API for `swedencentral` (Linux):
+Measured with the Azure Retail Prices API for `northcentralus` (Linux, Arm64):
 
 | Item | $/hour | $/day |
 | --- | --- | --- |
-| `Standard_D2as_v5` | 0.092 | 2.21 |
+| `Standard_D2pls_v6` | 0.062 | 1.49 |
 | Standard LoadBalancer | ~0.025 | 0.60 |
 | Public IP | ~0.005 | 0.12 |
 | Control plane (Free tier) | 0 | 0 |
-| **Total** | | **~2.93** |
+| **Total** | | **~2.21** |
 
 A subscription budget (`budget-azulab-dev`, 50 per month in the billing currency)
 notifies at 80% of actual spend and 100% of the forecast. It is created only when

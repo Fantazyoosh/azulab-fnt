@@ -163,7 +163,7 @@ Dlatego awaria Key Vault drenuje ruch, a nie restartuje wszystkich replik."
 - [ ] Readiness vs liveness
 - [ ] Zero-downtime: `maxUnavailable: 0`, `preStop`, SIGTERM
 - [ ] Workload Identity — cały łańcuch
-- [ ] Dlaczego `swedencentral`, a nie `polandcentral`
+- [ ] Dlaczego `northcentralus` i Arm64, a nie `polandcentral`
 - [ ] `kubenet` — trade-off
 - [ ] Jeden obraz, dwa runtime'y (i dlaczego Easy Auth ma jeden sekret)
 - [ ] Co bym zmienił dla produkcji (3 rzeczy)

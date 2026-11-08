@@ -140,15 +140,17 @@ Gdzie: `infra/aks.tf`, `docs/aks.md`
 dostają adresy z `pod_cidr`. Dla jednodniowego labu to najmniej ruchomych części.
 Produkcyjnie: Azure CNI Overlay (adresy podów z puli poza VNetem) + NetworkPolicy.
 
-## 13. Dlaczego klaster jest w `swedencentral`, a resource group w Polsce?
+## 13. Dlaczego klaster jest w `northcentralus`, a resource group w Polsce?
 
 Gdzie: `infra/aks.tf`, `docs/aks.md`
 
 Subskrypcja to Azure Free Trial (`quotaId: FreeTrial_2014-09-01`). Restrykcje SKU są
 per region: `polandcentral`, `westeurope`, `northeurope`, `germanywestcentral`,
 `eastus`, `eastus2`, `uksouth` i `francecentral` odrzucają każdą maszynę ogólnego
-przeznaczenia. `swedencentral` przyjmuje `Standard_D2as_v5`. Resource group to
-kontener logiczny — nie ogranicza lokalizacji zasobów.
+przeznaczenia. `northcentralus` przyjmuje `Standard_D2pls_v6` (Arm64,
+2 vCPU / 4 GiB) za 0,062 $/h — najtaniej, jak tę subskrypcję stać. Obraz jest
+multi-arch (amd64 + arm64). Resource group to kontener logiczny — nie ogranicza
+lokalizacji zasobów.
 
 ## 14. Co się stanie, jeśli dam `defaultAction = Deny` bez listy IP?
 
@@ -189,8 +191,8 @@ Gdzie: `docs/rbac-matrix.md`
 Gdzie: `infra/main.tf`, `docs/aks.md`
 
 - Container Apps: scale-to-zero, ~0 gdy nikt nie używa.
-- AKS: `Standard_D2as_v5` ~2,21 $/dzień + LB ~0,60 $/dzień + public IP ~0,12 $/dzień
-  ≈ **2,93 $/dzień**.
+- AKS: `Standard_D2pls_v6` ~1,49 $/dzień + LB ~0,60 $/dzień + public IP ~0,12 $/dzień
+  ≈ **2,21 $/dzień**.
 - Control plane AKS Free = 0.
 - Po demo: `kubectl delete svc azulab` i `az aks stop`.
 

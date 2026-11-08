@@ -67,7 +67,7 @@ it without looking.
 - `aks.tf`: Free tier control plane, one node, OIDC issuer + workload identity,
   and the federated credential whose subject is the Kubernetes ServiceAccount.
 - Task: set `min_replicas = 1`, apply, note the cost difference the next morning.
-- Task: read `docs/aks.md` and explain why the cluster is in `swedencentral`.
+- Task: read `docs/aks.md` and explain why the cluster is in `northcentralus` and why Arm64.
 
 ## Weekend self-tasks (do these yourself)
 - [ ] Re-implement graceful shutdown from memory.

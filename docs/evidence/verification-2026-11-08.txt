@@ -1,0 +1,88 @@
+# Azulab Drop — verification evidence
+# Generated: 2026-11-08
+# Build measured: 055f5211a7e7be1cb4b10cd04a874588694b77e6
+# Change under test: cheap product seal, Debug tab, Arm64 cluster, cost guard
+# AKS: http://20.80.52.28/  (northcentralus, Arm64)
+# ACA: https://ca-azulab-dev.bluesand-12892b79.polandcentral.azurecontainerapps.io
+
+## Cluster and artifact
+
+$ az aks list -o json --query "[].{name:name,loc:location,state:powerState.code,node:agentPoolProfiles[0].vmSize,disk:agentPoolProfiles[0].osDiskSizeGb}"
+name             loc             state    node              disk
+aks-azulab-dev   northcentralus  Running  Standard_D2pls_v6 30
+
+$ kubectl get nodes -o wide
+aks-system-37128616-vmss000000   Ready   v1.36.5   ...   arm64
+
+$ kubectl -n azulab get pods
+azulab-6786f8b897-qrpnh   1/1   Running   0   111s
+azulab-6786f8b897-rmw97   1/1   Running   0   97s
+
+$ kubectl -n azulab get hpa
+azulab   Deployment/azulab   cpu: 5%/60%   2   6   2
+
+$ curl -s http://20.80.52.28/version
+{"service":"azulab","version":"055f5211a7e7be1cb4b10cd04a874588694b77e6",
+ "pod":"azulab-6786f8b897-rmw97","node":"aks-system-37128616-vmss000000",
+ "namespace":"azulab","image":"ghcr.io/fantazyoosh/azulab-fnt:055f5211a7e7be1cb4b10cd04a874588694b77e6"}
+
+## Product seal is cheap
+
+$ curl -s -X POST http://20.80.52.28/api/drops/nKmjuUjTwwSa/seal
+{"ok":true,"algorithm":"SHA256-SALTED","iterations":0,
+ "digest":"04d588cb41b8022d1233924f0fe8280d9e2bb92cdc81658eb102ef9c42fc9452",
+ "ms":0,"pod":"azulab-6786f8b897-qrpnh"}
+
+$ curl -s -X POST http://20.80.52.28/api/drops/nKmjuUjTwwSa/verify
+{"ok":true,"digest":"04d588cb41b8022d1233924f0fe8280d9e2bb92cdc81658eb102ef9c42fc9452",
+ "ms":0,"sealedAt":"2026-11-08T14:20:04.724Z","iterations":0}
+
+Old PBKDF2 records still verify (unit test "verifySeal still accepts a legacy
+PBKDF2 record"); the product path no longer runs PBKDF2.
+
+## Debug endpoint (opt-in CPU work)
+
+$ curl -s -X POST -H 'content-type: application/json' \
+    -d '{"iterations":10000,"rounds":1}' http://20.80.52.28/debug/load
+{"ok":true,"pod":"azulab-6786f8b897-rmw97","iterations":10000,"rounds":1,"ms":2}
+
+$ curl -s -o /dev/null -w '%{http_code}' -X POST ... https://ca-azulab-dev.../debug/load
+401   (Easy Auth protects the path before the app sees it; the UI needs a session)
+
+## Legacy endpoints are gone
+
+$ curl -o /dev/null -w '%{http_code}' http://20.80.52.28/api/message
+404
+$ curl -o /dev/null -w '%{http_code}' http://20.80.52.28/api/blobs
+404
+
+## Readiness and identity
+
+$ curl -s http://20.80.52.28/ready
+{"status":"ready","checks":{"keyVault":"ok",
+ "signingKey":"c7136de0e3414175ac785fe505e8d43a","storage":"ok",
+ "storageConsecutiveFailures":0}}
+
+$ curl -s http://20.80.52.28/api/config
+{"store":"azure","container":"drops","keyVault":"keyvault",
+ "keyVersion":"c7136de0e3414175ac785fe505e8d43a","sealAlgorithm":"SHA256-SALTED",
+ "debugLoadIterations":600000,"debugEndpoints":true}
+
+$ curl -s http://20.80.52.28/api/blob/stats
+{"container":"drops","objects":27,"bytes":0,"versions":379,"deleted":0,
+ "tiers":{"Hot":27}}
+
+## Pipeline
+
+CI (main) 42487647399: tests, multi-arch build (linux/amd64 + linux/arm64), push.
+CD (deploy) 42487814650: ACA + AKS, smoke /health and /ready on both.
+CD (deploy) 42489125167: workflow_dispatch against the new Arm64 cluster, smoke OK.
+
+$ terraform plan
+No changes. Your infrastructure matches the configuration.
+
+## Known consequence of the migration
+
+The public AKS address changed from 74.158.77.185 (swedencentral) to
+20.80.52.28 (northcentralus). Older screenshots and the 2026-11-04 evidence file
+keep the old address on purpose: they are a record, not a live document.

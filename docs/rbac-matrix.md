@@ -29,7 +29,7 @@ the reverse.
 | `maciej.waszkiewicz@me.com` | user | `Storage Blob Data Contributor` | Terraform state account | the backend needs data-plane access to read/write state |
 | `id-azulab-dev-app` | managed identity | `Key Vault Secrets User` | the vault | runtime identity; narrow and managed by Terraform |
 | `id-azulab-dev-app` | managed identity | `Storage Blob Data Contributor` | the storage account | runtime identity; narrow |
-| `aks-azulab-dev` cluster identity | managed identity | `Contributor` | `MC_…_swedencentral` | created by AKS to manage its own node resource group |
+| `aks-azulab-dev` cluster identity | managed identity | `Contributor` | `MC_…_northcentralus` | created by AKS to manage its own node resource group |
 | AKS kubelet identity | managed identity | *none* | — | no ACR: the image is public on GHCR |
 | `azulab-web` | app registration | *none* | — | user sign-in for Easy Auth only; no Azure permissions |
 

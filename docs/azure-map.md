@@ -16,8 +16,8 @@ Stan na **2026-11-05**, subskrypcja Free Trial.
 | Subskrypcja | `f2c06f27-c982-4ecb-b81b-604acd6f52d3` |
 | Tenant | `e86914e6-0f72-471f-8d4b-fab57014ff26` |
 | Resource group | `rg-azulab-dev-polandcentral` |
-| AKS | `aks-azulab-dev` (region `swedencentral`) |
-| AKS node pool | `system`, VMSS `aks-system-32184980-vmss` |
+| AKS | `aks-azulab-dev` (region `northcentralus`, Arm64) |
+| AKS node pool | `system`, VMSS `aks-system-37128616-vmss` |
 | ACA | `ca-azulab-dev` (region `polandcentral`) |
 | ACA environment | `cae-azulab-dev` |
 | Key Vault | `kv-azulab-dev-6mvarl` |
@@ -59,7 +59,7 @@ az resource list -g rg-azulab-dev-polandcentral \
   --query "[].{name:name,type:type,location:location}" -o table
 ```
 
-Uwaga: AKS jest w `swedencentral`, reszta w `polandcentral`. Resource group
+Uwaga: AKS jest w `northcentralus`, reszta w `polandcentral`. Resource group
 `rg-azulab-dev-polandcentral` to tylko nazwa; nie wymusza regionu.
 
 ---
@@ -71,7 +71,7 @@ Uwaga: AKS jest w `swedencentral`, reszta w `polandcentral`. Resource group
 | Miejsce | Co sprawdzić |
 | --- | --- |
 | **Overview** | wersja Kubernetes, API server endpoint, liczba node’ów |
-| **Node pools** | pool `system`, 1 node, `Standard_D2as_v5` (2 vCPU / 8 GiB), autoscaling **off** |
+| **Node pools** | pool `system`, 1 node, `Standard_D2pls_v6` (2 vCPU / 4 GiB, Arm64), autoscaling **off** |
 | **Workloads** | Deployment `azulab`, pody, ich stan |
 | **Configuration** | OIDC issuer, Workload Identity |
 | **Access control (IAM)** | role control-plane na klastrze |

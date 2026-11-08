@@ -241,10 +241,10 @@ az storage account management-policy show \
 
 Say:
 
-> About 2.93 $/day all-in: one node (2.21), one LoadBalancer (0.60) and its
+> About 2.21 $/day all-in: one Arm64 node (1.49), one LoadBalancer (0.60) and its
 > public IP (0.12) dominate. Container Apps is zero at idle because it scales to
 > zero. The 50 $ budget alert is an early warning, not a cap — it fires after
-> roughly 17 days of continuous runtime. The levers are: one node, no ACR, ACA
+> roughly 23 days of continuous runtime. The levers are: one node, no ACR, ACA
 > scale-to-zero, delete the Service between sessions, stop the cluster, and a
 > lifecycle rule on the only growing container. Blob retention is bounded at 90
 > days; the demo cannot quietly accumulate cost.

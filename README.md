@@ -156,9 +156,10 @@ to say. It is written in Polish.
   15-minute pre-flight (Polish).
 - **[Demo script (`docs/demo-script.md`)](docs/demo-script.md)** — commands and
   "what to say" for each of the seven chapters.
-- **[Verification evidence (`docs/evidence/verification-2026-11-04.txt`)](docs/evidence/verification-2026-11-04.txt)**
-  — the measured build: cross-runtime link, HPA 2 → 6 → 2, bounded revocation,
-  crash continuity.
+- **[Verification evidence (`docs/evidence/verification-2026-11-08.txt`)](docs/evidence/verification-2026-11-08.txt)**
+  — the current build on Arm64: cheap seal, Debug load, readiness, pipeline.
+  The [2026-11-04 run](docs/evidence/verification-2026-11-04.txt) keeps the
+  earlier measurements (HPA 2 → 6 → 2, revocation, crash continuity).
 - **[Azure map (`docs/azure-map.md`)](docs/azure-map.md)** — where to inspect every
   resource in the Portal and CLI, plus the real state of RBAC, security and
   scanning (including what is deliberately missing).

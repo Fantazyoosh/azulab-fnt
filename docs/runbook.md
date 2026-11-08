@@ -37,12 +37,12 @@ them. Every command here has been executed against the live lab.
 | | Container Apps | AKS |
 | --- | --- | --- |
 | Name | `ca-azulab-dev` | `aks-azulab-dev` |
-| Region | `polandcentral` | `swedencentral` |
+| Region | `polandcentral` | `northcentralus` |
 | Scale | 0 → 2 replicas | HPA 2 → 6 replicas, 1 node |
 | Identity | user-assigned managed identity | Workload Identity (same UAMI) |
 | Deploy | `az containerapp update` | `kubectl apply -k k8s/` |
 | Rollback | activate previous revision | `kubectl rollout undo` |
-| Cost when idle | ~0 | ~2.93 $/day |
+| Cost when idle | ~0 | ~2.21 $/day |
 
 Both run the same image and the same application code.
 
@@ -246,7 +246,7 @@ CD owns the artifact.
 **Cause:** Free Trial subscription, per-region SKU restrictions. `polandcentral`
 only exposes HPC/GPU sizes to this offer.
 **Fix:** verify with `Microsoft.Compute/skus` restrictions, then pick a region where
-the size is allowed (`swedencentral` here).
+the size is allowed (`northcentralus` here).
 
 ### Trap 5 — Storage locked out after hardening
 **Symptom:** `403 KeyBasedAuthenticationNotPermitted` during `terraform plan`.
