@@ -6,7 +6,7 @@
 import { el, header, card, badge, note, codeBlock, copyButton } from "../ui.js";
 
 const ITEMS = [
-  { item: "AKS node · Standard_D2as_v5", unit: "2 vCPU / 8 GiB", day: 2.21, month: 66.3, note: "the compute floor" },
+  { item: "AKS node · Standard_D2pls_v6", unit: "2 vCPU / 4 GiB · Arm64", day: 1.49, month: 44.6, note: "the compute floor" },
   { item: "Standard Load Balancer", unit: "one public Service", day: 0.6, month: 18.0, note: "rules + data processed" },
   { item: "Public IP", unit: "static, Standard", day: 0.12, month: 3.6, note: "released with the Service" },
   { item: "Container Apps", unit: "scale to zero", day: 0, month: 0, note: "idle costs nothing" },
@@ -17,7 +17,7 @@ const ITEMS = [
 ];
 
 const LEVERS = [
-  ["One node, two vCPU", "The cluster is a demo, not a production fleet. A second node would double the largest line item."],
+  ["One Arm64 node, two vCPU", "The cheapest SKU the subscription may create; a second node would double the largest line item."],
   ["Container Apps scales to zero", "The second runtime is free when nobody is using it; it wakes on the next request."],
   ["No ACR", "The image lives on GHCR. A basic registry would add a fixed monthly fee for no demo value."],
   ["Lifecycle policy", "Sealed drops move to Cool after 30 days and are deleted after 90. The container cannot grow without a bound."],
@@ -45,17 +45,17 @@ export default {
         header(
           "Chapter 05 · Cost",
           "Small by design.",
-          "The lab runs at roughly 2.93 $/day when everything is on. That number is dominated by one node and one load balancer; the managed services are noise at this volume."
+          "The lab runs at roughly 2.21 $/day when everything is on. That number is dominated by one node and one load balancer; the managed services are noise at this volume."
         ),
-        el("div", { class: "flex flex-wrap gap-2" }, badge("2.93 $/day", "accent"), badge("~88 $/30d", "warn"), badge("budget alert 50 $", "warn"))
+        el("div", { class: "flex flex-wrap gap-2" }, badge("2.21 $/day", "accent"), badge("~66 $/30d", "warn"), badge("budget alert 50 $", "warn"))
       )
     );
 
     const summary = el(
       "div",
       { class: "mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" },
-      statCard("Run rate", "2.93 $", "per day, all services on"),
-      statCard("30 days", "~88 $", "if left running"),
+      statCard("Run rate", "2.21 $", "per day, all services on"),
+      statCard("30 days", "~66 $", "if left running"),
       statCard("Budget alert", "50 $", "early warning, not a cap"),
       statCard("Quota", "4 vCPU", "Free Trial subscription")
     );
@@ -86,9 +86,9 @@ export default {
     );
 
     const billCard = card(
-      header("The bill", "What dominates", "Sweden Central list prices, captured for the demo. Not a substitute for the Cost Management blade."),
+      header("The bill", "What dominates", "North Central US list prices, captured for the demo. Not a substitute for the Cost Management blade."),
       el("div", { class: "mt-4 overflow-x-auto" }, table),
-      note("The 50 $ budget alert is an early warning, not a spending cap. At 2.93 $/day it fires after roughly 17 days of continuous runtime — which is why the cluster is stopped between sessions.", "warn")
+      note("The 50 $ budget alert is an early warning, not a spending cap. At 2.21 $/day it fires after roughly 23 days of continuous runtime — which is why the cluster is stopped between sessions.", "warn")
     );
 
     const leversCard = card(
