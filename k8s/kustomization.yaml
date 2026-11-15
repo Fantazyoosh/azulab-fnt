@@ -16,4 +16,4 @@ resources:
 # `kubectl apply -k` uses. Keep it at the last commit that changed the app.
 images:
   - name: ghcr.io/fantazyoosh/azulab-fnt
-    newTag: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
+    newTag: a415e19eb85d8dec07089b6ccdf97175f2633cfa

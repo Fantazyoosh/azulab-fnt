@@ -22,3 +22,6 @@ infra/*.tfvars
 .idea/
 .vscode/
 *.swp
+
+# agentlab/ is its own repo (Azure lab notes), never a subtree here
+agentlab/

@@ -65,7 +65,7 @@ spec:
 
       containers:
         - name: azulab
-          image: ghcr.io/fantazyoosh/azulab-fnt:1c4f897b150a820e5700e6aebdf4cdd63255f57b
+          image: ghcr.io/fantazyoosh/azulab-fnt:a415e19eb85d8dec07089b6ccdf97175f2633cfa
           imagePullPolicy: IfNotPresent
 
           ports:
@@ -79,9 +79,9 @@ spec:
             # Baseline values; CD overwrites both with the tag it deploys so the
             # UI never reports a version different from the running image.
             - name: APP_VERSION
-              value: 1c4f897b150a820e5700e6aebdf4cdd63255f57b
+              value: a415e19eb85d8dec07089b6ccdf97175f2633cfa
             - name: APP_IMAGE
-              value: ghcr.io/fantazyoosh/azulab-fnt:1c4f897b150a820e5700e6aebdf4cdd63255f57b
+              value: ghcr.io/fantazyoosh/azulab-fnt:a415e19eb85d8dec07089b6ccdf97175f2633cfa
             - name: KEY_VAULT_URL
               value: "https://kv-azulab-dev-6mvarl.vault.azure.net/"
             - name: STORAGE_ACCOUNT_URL
