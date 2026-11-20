@@ -32,8 +32,8 @@ function createBlobAdmin({ cfg, credential }) {
       const tiers = {};
       let bytes = 0;
       for (const item of current) {
-        bytes += item.contentLength || 0;
-        const tier = item.tier || "Hot";
+        bytes += item.properties.contentLength || 0;
+        const tier = item.properties.accessTier || "Hot";
         tiers[tier] = (tiers[tier] || 0) + 1;
       }
 
