@@ -97,12 +97,22 @@ Done when: you can name the plan output and the exit code.
 
 ## Task 4 — check CI and the image tag (read-only)
 
-The last commit `c33d1be` moved the live image tag to `a415e19`.
+The tag must be the short SHA of the newest commit that CI built. Do not write a
+fixed SHA here: CD moves the tag on every push, so a hard-coded value goes stale.
+Ask git for the value.
 
 1. `gh run list --limit 10` — find the newest `CI` and `CD` runs for `main`.
-2. `kubectl -n azulab get deploy azulab -o jsonpath='{.spec.template.spec.containers[0].image}'`
-   — the tag must say `a415e19`.
-3. Say whether the runs are green and whether the tag matches.
+   Ignore `CI` runs with state `skipped`: a docs-only push does not build.
+2. Get the tag on the cluster:
+   `kubectl -n azulab get deploy azulab -o jsonpath='{.spec.template.spec.containers[0].image}'`
+3. Get the commit that CD built:
+   `gh run list --workflow=cd.yml --limit 1 --json headSha,conclusion`
+   (or read the commit of the newest green `CD` run in the list).
+4. Say whether the runs are green and whether the tag matches that commit.
+
+Example, run of 2026-11-20: the tag was
+`ghcr.io/fantazyoosh/azulab-fnt:b465aa67…`, and CD run `44795006309` built
+`b465aa6`. The match was correct.
 
 Done when: the report names the runs, their state, and the live tag.
 
